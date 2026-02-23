@@ -288,6 +288,37 @@ pub fn render_query(
                 "Error rendering query for [{}] [{}]: {}",
                 res_name, anchor, e
             );
+
+            // Extract template variable references for diagnostics
+            let re = Regex::new(r"\{\{\s*(\w+)").unwrap();
+            let referenced_vars: Vec<&str> = re
+                .captures_iter(&processed_query)
+                .filter_map(|c| c.get(1).map(|m| m.as_str()))
+                .collect();
+            let missing: Vec<&&str> = referenced_vars
+                .iter()
+                .filter(|v| !ctx.contains_key(**v))
+                .collect();
+
+            if !missing.is_empty() {
+                error!(
+                    "Missing variables in context for [{}] [{}]: {:?}",
+                    res_name, anchor, missing
+                );
+                error!(
+                    "Hint: ensure these properties are defined in the manifest for resource [{}], \
+                     or that the .iql template only references variables provided by the manifest.",
+                    res_name
+                );
+            }
+
+            debug!(
+                "[{}] [{}] available context keys: {:?}",
+                res_name,
+                anchor,
+                ctx.keys().collect::<Vec<_>>()
+            );
+
             process::exit(1);
         }
     }
@@ -383,6 +414,35 @@ pub fn render_inline_template(
                 "Error rendering inline template for [{}]: {}",
                 resource_name, e
             );
+
+            let re = Regex::new(r"\{\{\s*(\w+)").unwrap();
+            let referenced_vars: Vec<&str> = re
+                .captures_iter(&processed)
+                .filter_map(|c| c.get(1).map(|m| m.as_str()))
+                .collect();
+            let missing: Vec<&&str> = referenced_vars
+                .iter()
+                .filter(|v| !temp_context.contains_key(**v))
+                .collect();
+
+            if !missing.is_empty() {
+                error!(
+                    "Missing variables in context for [{}]: {:?}",
+                    resource_name, missing
+                );
+                error!(
+                    "Hint: ensure these properties are defined in the manifest for resource [{}], \
+                     or that the inline SQL only references variables provided by the manifest.",
+                    resource_name
+                );
+            }
+
+            debug!(
+                "[{}] available context keys: {:?}",
+                resource_name,
+                temp_context.keys().collect::<Vec<_>>()
+            );
+
             process::exit(1);
         }
     }

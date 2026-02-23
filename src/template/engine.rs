@@ -8,6 +8,7 @@
 //! `generate_patch_document`, `sql_list`, `sql_escape`.
 
 use std::collections::HashMap;
+use std::error::Error as StdError;
 
 use base64::Engine as Base64Engine;
 use serde_json::Value as JsonValue;
@@ -122,7 +123,7 @@ impl TemplateEngine {
         register_custom_filters(&mut tera);
 
         tera.add_raw_template(template_name, template)
-            .map_err(|e| TemplateError::SyntaxError(e.to_string()))?;
+            .map_err(|e| TemplateError::SyntaxError(full_error_chain(&e)))?;
 
         let mut tera_context = TeraContext::new();
         for (key, value) in context {
@@ -133,9 +134,28 @@ impl TemplateEngine {
         let uuid_val = uuid::Uuid::new_v4().to_string();
         tera_context.insert("uuid", &uuid_val);
 
-        tera.render(template_name, &tera_context)
-            .map_err(|e| TemplateError::RenderError(e.to_string()))
+        tera.render(template_name, &tera_context).map_err(|e| {
+            let full_msg = full_error_chain(&e);
+            if full_msg.contains("not found in context") {
+                TemplateError::VariableNotFound(full_msg)
+            } else {
+                TemplateError::RenderError(full_msg)
+            }
+        })
     }
+}
+
+/// Walk the full error source chain and concatenate all messages.
+/// Tera's top-level `Display` often only shows "Failed to render 'name'" while
+/// the root cause (e.g., missing variable) is buried in `source()`.
+fn full_error_chain(err: &dyn StdError) -> String {
+    let mut parts = vec![err.to_string()];
+    let mut current = err.source();
+    while let Some(cause) = current {
+        parts.push(cause.to_string());
+        current = cause.source();
+    }
+    parts.join(": ")
 }
 
 /// Register all custom Jinja2 filters matching the Python implementation.
@@ -370,5 +390,38 @@ mod tests {
 
         let result = engine.render("JSON: {{ json }}", &context).unwrap();
         assert_eq!(result, r#"JSON: {"key": "value"}"#);
+    }
+
+    #[test]
+    fn test_render_with_filters_missing_var_shows_name() {
+        let engine = TemplateEngine::new();
+        let context = HashMap::new();
+
+        let result = engine.render_with_filters("test_tpl", "Hello {{ missing_var }}!", &context);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("missing_var"),
+            "Error should mention the missing variable name, got: {}",
+            err_msg
+        );
+    }
+
+    #[test]
+    fn test_render_with_filters_missing_var_is_variable_not_found() {
+        let engine = TemplateEngine::new();
+        let context = HashMap::new();
+
+        let result = engine.render_with_filters("test_tpl", "{{ no_such_var }}", &context);
+        match result {
+            Err(TemplateError::VariableNotFound(msg)) => {
+                assert!(
+                    msg.contains("no_such_var"),
+                    "VariableNotFound error should contain variable name, got: {}",
+                    msg
+                );
+            }
+            other => panic!("Expected VariableNotFound error, got: {:?}", other),
+        }
     }
 }

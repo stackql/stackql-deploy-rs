@@ -61,6 +61,16 @@ resources:
                 - file(aws/iam/policy_statements/iam_service_linked_role.json)
               Version: '2012-10-17'
             PolicyName: "{{ stack_name }}-{{ stack_env }}-policy"
+      - name: managed_policy_arns
+        value: []
+      - name: max_session_duration
+        value: 3600
+      - name: permissions_boundary
+        value: ""
+      - name: tags
+        value: []
+        merge:
+          - global_tags
     exports:
       - aws_iam_role_name: aws_iam_cross_account_role_name
       - aws_iam_role_arn: aws_iam_cross_account_role_arn
