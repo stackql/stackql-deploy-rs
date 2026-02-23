@@ -18,3 +18,33 @@ name: kubernetes-the-hard-way
 Don't embed any environment symbols or designators in the `name` field, these are sourced at deploy time from the `STACK_ENV` argument to the `build`, `test` or `teardown` commands, and exposed for use in resource or property values as a global variable called `stack_env`.
 
 :::
+
+## Built-in variables
+
+The following variables are automatically available in all resource query templates and property values without needing to be defined in `globals`:
+
+| Variable | Description |
+|---|---|
+| `stack_name` | The name of the stack (from the `name` field in the manifest) |
+| `stack_env` | The target environment, supplied as the `STACK_ENV` argument to `build`, `test` or `teardown` |
+| `resource_name` | The name of the **current resource** being processed (from the `resource.name` field) |
+
+### `resource_name`
+
+The `resource_name` variable is set automatically for each resource as it is processed. This is useful when you need to reference the current resource's name in property values or query templates — for example, to construct unique identifiers or generate resource-specific naming conventions.
+
+```yaml
+resources:
+  - name: example_vpc
+    props:
+      - name: vpc_name
+        value: "{{ stack_name }}-{{ stack_env }}-{{ resource_name }}"
+```
+
+In this example, when deploying to the `dev` environment with a stack named `my-stack`, the `vpc_name` value would resolve to `my-stack-dev-example_vpc`.
+
+:::note
+
+`resource_name` changes for each resource as the manifest is processed top-down. It always reflects the name of the resource currently being deployed, tested or torn down.
+
+:::
