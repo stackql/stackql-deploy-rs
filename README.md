@@ -54,3 +54,20 @@ cargo run -- build --env prod --provider aws --region us-east-1
 ./target/release/stackql-deploy init my-project --template https://raw.githubusercontent.com/stackql/stackql-deploy-rust/main/template-hub/azure/starter
 
 ./target/release/stackql-deploy init my-project --template https://raw.githubusercontent.com/stackql/stackql-deploy-rust/main/template-hub/azure/fred
+
+
+#### test
+
+git fetch origin && git merge origin/main
+
+cargo build --release
+
+./target/release/stackql-deploy build \
+examples/databricks/serverless dev \
+-e AWS_REGION=${AWS_REGION} \
+-e AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID} \
+-e DATABRICKS_ACCOUNT_ID=${DATABRICKS_ACCOUNT_ID} \
+-e DATABRICKS_AWS_ACCOUNT_ID=${DATABRICKS_AWS_ACCOUNT_ID} \
+--dry-run
+
+C:\LocalGitRepos\stackql\stackql-deploy-rs\examples\databricks\serverless\stackql_manifest.yml

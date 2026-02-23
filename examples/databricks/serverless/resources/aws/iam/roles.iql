@@ -1,17 +1,34 @@
 /*+ exists */
 SELECT count(*) as count
 FROM awscc.iam.roles
-WHERE region = 'us-east-1' AND Identifier = '{{ role_name }}'
+WHERE region = 'us-east-1' AND
+Identifier = '{{ role_name }}'
 ;
 
 /*+ create */
 INSERT INTO awscc.iam.roles (
  AssumeRolePolicyDocument,
+ Description,
+ ManagedPolicyArns,
+ MaxSessionDuration,
+ Path,
+ PermissionsBoundary,
+ Policies,
+ RoleName,
+ Tags,
  region
 )
 SELECT
-'{{ assume_role_policy_document }}',
-'{{ region }}';
+ '{{ assume_role_policy_document }}',
+ '{{ description }}',
+ '{{ managed_policy_arns }}',
+ '{{ max_session_duration }}',
+ '{{ path }}',
+ '{{ permissions_boundary }}',
+ '{{ policies }}',
+ '{{ role_name }}',
+ '{{ tags }}',
+ '{{ region }}';
 
 /*+ update */
 UPDATE awscc.iam.roles
@@ -31,15 +48,26 @@ AND Identifier = '{{ role_name }}';
 SELECT count(*) as count
 FROM awscc.iam.roles
 WHERE 
-region = {{ region }} AND
-region = 'us-east-1' AND Identifier = '{{ role_name }}'
+region = 'us-east-1' AND
+Identifier = '{{ role_name }}'
 ;
 
 /*+ exports */
-SELECT region
+SELECT
+arn,
+assume_role_policy_document,
+description,
+managed_policy_arns,
+max_session_duration,
+path,
+permissions_boundary,
+policies,
+role_id,
+role_name,
+tags
 FROM awscc.iam.roles
-WHERE region = 'us-east-1' AND Identifier = '{{ role_name }}'
-;
+WHERE region = 'us-east-1' AND
+Identifier = '{{ role_name }}';
 
 /*+ delete */
 DELETE FROM awscc.iam.roles
