@@ -1,0 +1,287 @@
+version: 1
+name: "snowflake-interoperability"
+description: "Databricks Snowflake Interoperability Example"
+providers:
+  - snowflake
+  - databricks_account
+  - databricks_workspace
+globals:
+  - name: databricks_workspace_name
+    description: databricks workspace name
+    value: "{{ DATABRICKS_WORKSPACE_NAME }}"
+  - name: databricks_metastore_name
+    description: databricks metastore name
+    value: "{{ DATABRICKS_METASTORE_NAME }}"
+  - name: databricks_external_location
+    description: databricks external location
+    value: "{{ DATABRICKS_EXTERNAL_LOCATION }}"
+  - name: databricks_admin_group
+    description: databricks admin group
+    value: "{{ DATABRICKS_ADMIN_GROUP }}"
+  - name: databricks_account_id
+    description: databricks account id
+    value: "{{ DATABRICKS_ACCOUNT_ID }}"
+  - name: snowflake_endpoint
+    description: snowflake endpoint (org-account)
+    value: "{{ SNOWFLAKE_ORG }}-{{ SNOWFLAKE_ACCOUNT }}"
+  - name: snowflake_db
+    description: snowflake database
+    value: "{{ SNOWFLAKE_DB }}"
+  - name: snowflake_schema
+    description: snowflake schema
+    value: "{{ SNOWFLAKE_SCHEMA }}"
+  - name: snowflake_whse
+    description: snowflake warehouse (org-account)
+    value: "{{ SNOWFLAKE_WAREHOUSE }}"
+  - name: global_tags
+    value:
+      - Key: Provisioner
+        Value: stackql
+      - Key: StackName
+        Value: "{{ stack_name }}"
+      - Key: StackEnv
+        Value: "{{ stack_env }}"
+resources:
+
+# ====================================================================================
+# Source Required Variables
+# ====================================================================================
+  
+  - name: get_workspace_deployment_name
+    type: query
+    props: []
+    sql: |
+      SELECT
+      deployment_name as databricks_deployment_name,
+      workspace_status,
+      workspace_status_message
+      FROM databricks_account.provisioning.workspaces
+      WHERE account_id = '{{ databricks_account_id }}';
+    exports:
+      - databricks_deployment_name
+      - workspace_status
+      - workspace_status_message
+
+  - name: get_metastore_id
+    type: query
+    props: []
+    sql: |
+      SELECT
+      metastore_id
+      FROM databricks_workspace.unitycatalog.metastores
+      WHERE deployment_name = '{{ databricks_deployment_name }}'
+      AND name = '{{ databricks_metastore_name }}';
+    exports:
+      - metastore_id
+
+# ====================================================================================
+# Enable External Access
+# ====================================================================================
+
+  - name: enable_external_access
+    type: command
+    props: []
+    sql: |
+      UPDATE databricks_workspace.unitycatalog.metastores
+      SET data__external_access_enabled = 'true'
+      WHERE id = '{{ metastore_id }}' AND
+      deployment_name = '{{ databricks_deployment_name }}';
+
+# ====================================================================================
+# DBX UC Catalog and Schema
+# ====================================================================================
+
+  - name: interoperability_catalog
+    file: databricks_workspace/catalog.iql
+    props:
+    - name: name
+      value: uc_interoperability
+    - name: comment
+      value: "Interoperability demonstration catalog for Databricks and Snowflake"
+    - name: storage_root
+      value: "{{ databricks_external_location }}"
+    exports:
+    - catalog_name
+
+  - name: catalog_grants
+    type: command
+    props: 
+      - name: privileges
+        value:
+          - "ALL_PRIVILEGES"
+          - "MANAGE"
+    sql: |
+      UPDATE databricks_workspace.unitycatalog.grants
+      SET data__changes = '[{"add": {{ privileges }},"principal": "{{ databricks_admin_group }}"}]' 
+      WHERE full_name = '{{ catalog_name }}' AND
+      securable_type = 'catalog' AND
+      deployment_name = '{{ databricks_deployment_name }}';
+
+  - name: interoperability_schema
+    file: databricks_workspace/schema.iql
+    props:
+    - name: name
+      value: demo_schema
+    - name: catalog_name
+      value: "{{ catalog_name}}"
+    - name: comment
+      value: "Demo schema for interoperability"
+    exports:
+    - schema_name
+
+# ====================================================================================
+# Create Bronze Iceberg Table, Silver and Gold Delta Tables - Do this in the Workspace
+# ===================================================================================
+
+# ====================================================================================
+# Create Service Principal and Secret for Catalog Integration
+# ====================================================================================
+
+  - name: service_principal
+    file: databricks_workspace/service_principal.iql
+    props:
+    - name: name
+      value: interoperability_service_principal
+    exports: 
+    - service_principal_name
+    - service_principal_application_id
+    - service_principal_id
+
+  - name: service_principal_grant_external_use
+    type: command
+    props: 
+      - name: privileges
+        value:
+          - "EXTERNAL_USE_SCHEMA"
+          - "SELECT"
+          - "USE_CATALOG"
+          - "USE_SCHEMA"
+    sql: |
+      UPDATE databricks_workspace.unitycatalog.grants
+      SET data__changes = '[{"add": {{ privileges }},"principal": "{{ service_principal_application_id }}"}]' 
+      WHERE full_name = '{{ catalog_name }}' AND
+      securable_type = 'catalog' AND
+      deployment_name = '{{ databricks_deployment_name }}';
+
+  - name: service_principal_secret
+    type: query
+    props:
+    - name: name
+      value: interoperability_service_principal
+    sql: |
+      INSERT INTO databricks_account.oauth.service_principal_secrets (
+      account_id,
+      service_principal_id
+      )
+      SELECT 
+      '{{ databricks_account_id }}',
+      '{{ service_principal_id }}'
+      RETURNING secret
+      ;
+    exports:
+    - secret
+    # protected:
+    # - secret
+
+# ====================================================================================
+# (Snowflake) Create Catalog Integration and Related Objects 
+# ====================================================================================
+  
+  - name: snowflake_catalog_integration
+    type: command
+    file: snowflake/statement.iql
+    props:
+      - name: '"User-Agent"'
+        value: stackql
+      - name: statement
+        value: |
+          CREATE CATALOG INTEGRATION IF NOT EXISTS unity_catalog_demo_int 
+          CATALOG_SOURCE = ICEBERG_REST
+          TABLE_FORMAT = ICEBERG
+          CATALOG_NAMESPACE = '{{ schema_name }}'
+          REST_CONFIG = (
+              CATALOG_URI = 'https://{{ databricks_deployment_name }}.cloud.databricks.com/api/2.1/unity-catalog/iceberg-rest'
+              WAREHOUSE  = '{{ catalog_name }}'
+              ACCESS_DELEGATION_MODE = VENDED_CREDENTIALS
+          )
+          REST_AUTHENTICATION = (
+          TYPE = OAUTH
+              OAUTH_TOKEN_URI = 'https://{{ databricks_deployment_name }}.cloud.databricks.com/oidc/v1/token'
+              OAUTH_CLIENT_ID = '{{ service_principal_application_id }}'
+              OAUTH_CLIENT_SECRET = '{{ secret }}'
+              OAUTH_ALLOWED_SCOPES = ('all-apis', 'sql')
+          )
+          ENABLED = TRUE
+          REFRESH_INTERVAL_SECONDS = 30
+      - name: timeout
+        value: 10
+      - name: database
+        value: '{{ snowflake_db }}'
+      - name: schema
+        value: '{{ snowflake_schema }}'
+      - name: warehouse
+        value: '{{ snowflake_whse }}'
+
+  - name: snowflake_iceberg_bronze_table
+    file: snowflake/statement.iql
+    type: command
+    props:
+      - name: '"User-Agent"'
+        value: stackql
+      - name: statement
+        value: |
+          CREATE OR REPLACE ICEBERG TABLE retail_sales_bronze
+          CATALOG = 'unity_catalog_demo_int'
+          CATALOG_TABLE_NAME = 'retail_sales_bronze'
+          AUTO_REFRESH = TRUE
+      - name: timeout
+        value: 30
+      - name: database
+        value: '{{ snowflake_db }}'
+      - name: schema
+        value: '{{ snowflake_schema }}'
+      - name: warehouse
+        value: '{{ snowflake_whse }}'        
+
+  - name: snowflake_delta_silver_table
+    file: snowflake/statement.iql
+    type: command
+    props:
+      - name: '"User-Agent"'
+        value: stackql
+      - name: statement
+        value: |
+          CREATE OR REPLACE ICEBERG TABLE retail_sales_silver
+          CATALOG = 'unity_catalog_demo_int'
+          CATALOG_TABLE_NAME = 'retail_sales_silver'
+          AUTO_REFRESH = TRUE
+      - name: timeout
+        value: 30
+      - name: database
+        value: '{{ snowflake_db }}'
+      - name: schema
+        value: '{{ snowflake_schema }}'
+      - name: warehouse
+        value: '{{ snowflake_whse }}'        
+
+  - name: snowflake_delta_gold_table
+    file: snowflake/statement.iql
+    type: command
+    props:
+      - name: '"User-Agent"'
+        value: stackql
+      - name: statement
+        value: |
+          CREATE OR REPLACE ICEBERG TABLE retail_sales_gold
+          CATALOG = 'unity_catalog_demo_int'
+          CATALOG_TABLE_NAME = 'retail_sales_gold'
+          AUTO_REFRESH = TRUE
+      - name: timeout
+        value: 30
+      - name: database
+        value: '{{ snowflake_db }}'
+      - name: schema
+        value: '{{ snowflake_schema }}'
+      - name: warehouse
+        value: '{{ snowflake_whse }}'        
+
