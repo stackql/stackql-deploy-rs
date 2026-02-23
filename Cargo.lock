@@ -2029,6 +2029,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "tempfile",
  "tera",
  "thiserror 1.0.69",
  "unicode-width 0.1.14",

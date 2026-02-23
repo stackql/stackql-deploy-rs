@@ -30,6 +30,9 @@ pub enum ManifestError {
 
     #[error("Invalid field: {0}")]
     InvalidField(String),
+
+    #[error("Failed to resolve file() directive: {0}")]
+    FileIncludeError(String),
 }
 
 /// Type alias for ManifestResult
@@ -171,11 +174,174 @@ pub struct PropertyValue {
     pub value: serde_yaml::Value,
 }
 
+/// Check if a string is a `file()` directive and extract the path.
+/// Matches patterns like `file(path/to/file.json)` with optional whitespace.
+fn parse_file_directive(s: &str) -> Option<&str> {
+    let trimmed = s.trim();
+    if trimmed.starts_with("file(") && trimmed.ends_with(')') {
+        let inner = trimmed[5..trimmed.len() - 1].trim();
+        if !inner.is_empty() {
+            return Some(inner);
+        }
+    }
+    None
+}
+
+/// Recursively walk a `serde_yaml::Value` tree and resolve any `file()` directives.
+///
+/// A `file()` directive is a string value of the form `file(relative/path.json)`.
+/// When encountered, the referenced file is read, parsed (as JSON or YAML depending
+/// on extension), and its contents replace the directive in the value tree.
+///
+/// This enables modularizing large manifest values (e.g., policy statements) into
+/// separate files:
+///
+/// ```yaml
+/// - name: policies
+///   value:
+///     - PolicyDocument:
+///         Statement:
+///           - file(policies/statement1.json)   # inserts a JSON object
+///           - file(policies/statement2.json)   # inserts a JSON object
+///         Version: '2012-10-17'
+/// ```
+fn resolve_file_directives(value: &mut serde_yaml::Value, base_dir: &Path) -> ManifestResult<()> {
+    match value {
+        serde_yaml::Value::String(s) => {
+            if let Some(file_path) = parse_file_directive(s) {
+                let resolved = load_file_contents(file_path, base_dir)?;
+                *value = resolved;
+            }
+        }
+        serde_yaml::Value::Sequence(seq) => {
+            let mut i = 0;
+            while i < seq.len() {
+                resolve_file_directives(&mut seq[i], base_dir)?;
+                i += 1;
+            }
+        }
+        serde_yaml::Value::Mapping(map) => {
+            // Collect keys first to avoid borrow issues
+            let keys: Vec<serde_yaml::Value> = map.keys().cloned().collect();
+            for key in keys {
+                if let Some(val) = map.get_mut(&key) {
+                    resolve_file_directives(val, base_dir)?;
+                }
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+/// Load and parse a file referenced by a `file()` directive.
+/// Supports JSON (.json) and YAML (.yml, .yaml) files.
+fn load_file_contents(file_path: &str, base_dir: &Path) -> ManifestResult<serde_yaml::Value> {
+    let full_path = base_dir.join(file_path);
+
+    debug!("Resolving file() directive: {} -> {:?}", file_path, full_path);
+
+    let content = fs::read_to_string(&full_path).map_err(|e| {
+        ManifestError::FileIncludeError(format!(
+            "cannot read '{}' (resolved to {:?}): {}",
+            file_path, full_path, e
+        ))
+    })?;
+
+    let ext = full_path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("");
+
+    let mut parsed: serde_yaml::Value = match ext {
+        "json" => {
+            let json_val: serde_json::Value =
+                serde_json::from_str(&content).map_err(|e| {
+                    ManifestError::FileIncludeError(format!(
+                        "failed to parse JSON file '{}': {}",
+                        file_path, e
+                    ))
+                })?;
+            // Convert JSON -> YAML value
+            serde_yaml::to_value(&json_val).map_err(|e| {
+                ManifestError::FileIncludeError(format!(
+                    "failed to convert JSON to YAML value for '{}': {}",
+                    file_path, e
+                ))
+            })?
+        }
+        "yml" | "yaml" => serde_yaml::from_str(&content).map_err(|e| {
+            ManifestError::FileIncludeError(format!(
+                "failed to parse YAML file '{}': {}",
+                file_path, e
+            ))
+        })?,
+        _ => {
+            // Default: try JSON first, fall back to YAML
+            if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(&content) {
+                serde_yaml::to_value(&json_val).map_err(|e| {
+                    ManifestError::FileIncludeError(format!(
+                        "failed to convert parsed content for '{}': {}",
+                        file_path, e
+                    ))
+                })?
+            } else {
+                serde_yaml::from_str(&content).map_err(|e| {
+                    ManifestError::FileIncludeError(format!(
+                        "failed to parse file '{}' as JSON or YAML: {}",
+                        file_path, e
+                    ))
+                })?
+            }
+        }
+    };
+
+    // Recursively resolve any nested file() directives in the loaded content
+    resolve_file_directives(&mut parsed, base_dir)?;
+
+    Ok(parsed)
+}
+
+/// Resolve all `file()` directives in a manifest's globals and resource properties.
+fn resolve_manifest_file_directives(
+    manifest: &mut Manifest,
+    base_dir: &Path,
+) -> ManifestResult<()> {
+    // Resolve in globals
+    for global in &mut manifest.globals {
+        resolve_file_directives(&mut global.value, base_dir)?;
+    }
+
+    // Resolve in resource properties
+    for resource in &mut manifest.resources {
+        for prop in &mut resource.props {
+            if let Some(ref mut value) = prop.value {
+                resolve_file_directives(value, base_dir)?;
+            }
+            if let Some(ref mut values) = prop.values {
+                for env_val in values.values_mut() {
+                    resolve_file_directives(&mut env_val.value, base_dir)?;
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
 impl Manifest {
     /// Loads a manifest file from the specified path.
+    /// After parsing, resolves any `file()` directives in property values.
+    /// File paths in `file()` directives are resolved relative to the `resources/`
+    /// directory under the manifest's parent directory.
     pub fn load_from_file(path: &Path) -> ManifestResult<Self> {
         let content = fs::read_to_string(path)?;
-        let manifest: Manifest = serde_yaml::from_str(&content)?;
+        let mut manifest: Manifest = serde_yaml::from_str(&content)?;
+
+        // Resolve file() directives relative to <stack_dir>/resources/
+        let stack_dir = path.parent().unwrap_or(Path::new("."));
+        let resources_dir = stack_dir.join("resources");
+        resolve_manifest_file_directives(&mut manifest, &resources_dir)?;
 
         // Validate the manifest
         manifest.validate()?;
@@ -285,5 +451,288 @@ impl Manifest {
                 process::exit(1);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    /// Helper: create a temp directory structure for testing file() directives.
+    fn setup_test_dir() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        // Create resources/ subdirectory (file() resolves relative to this)
+        fs::create_dir_all(dir.path().join("resources")).unwrap();
+        dir
+    }
+
+    #[test]
+    fn test_parse_file_directive() {
+        assert_eq!(parse_file_directive("file(foo/bar.json)"), Some("foo/bar.json"));
+        assert_eq!(parse_file_directive("  file( foo/bar.json )  "), Some("foo/bar.json"));
+        assert_eq!(parse_file_directive("file()"), None);
+        assert_eq!(parse_file_directive("not a directive"), None);
+        assert_eq!(parse_file_directive("file("), None);
+        assert_eq!(parse_file_directive("files(foo.json)"), None);
+    }
+
+    #[test]
+    fn test_resolve_file_directive_json_object() {
+        let dir = setup_test_dir();
+        let resources_dir = dir.path().join("resources");
+        fs::write(
+            resources_dir.join("stmt.json"),
+            r#"{"Effect": "Allow", "Action": ["s3:GetObject"], "Resource": ["*"]}"#,
+        )
+        .unwrap();
+
+        let mut value = serde_yaml::Value::String("file(stmt.json)".to_string());
+        resolve_file_directives(&mut value, &resources_dir).unwrap();
+
+        // Should be a mapping now, not a string
+        assert!(value.is_mapping(), "Expected mapping, got: {:?}", value);
+        let map = value.as_mapping().unwrap();
+        assert_eq!(
+            map.get(serde_yaml::Value::String("Effect".into())),
+            Some(&serde_yaml::Value::String("Allow".into()))
+        );
+    }
+
+    #[test]
+    fn test_resolve_file_directive_json_array() {
+        let dir = setup_test_dir();
+        let resources_dir = dir.path().join("resources");
+        fs::write(
+            resources_dir.join("statements.json"),
+            r#"[{"Effect": "Allow"}, {"Effect": "Deny"}]"#,
+        )
+        .unwrap();
+
+        let mut value = serde_yaml::Value::String("file(statements.json)".to_string());
+        resolve_file_directives(&mut value, &resources_dir).unwrap();
+
+        assert!(value.is_sequence(), "Expected sequence, got: {:?}", value);
+        let seq = value.as_sequence().unwrap();
+        assert_eq!(seq.len(), 2);
+    }
+
+    #[test]
+    fn test_resolve_file_directive_yaml_file() {
+        let dir = setup_test_dir();
+        let resources_dir = dir.path().join("resources");
+        fs::write(
+            resources_dir.join("stmt.yaml"),
+            "Effect: Allow\nAction:\n  - s3:GetObject\nResource:\n  - \"*\"\n",
+        )
+        .unwrap();
+
+        let mut value = serde_yaml::Value::String("file(stmt.yaml)".to_string());
+        resolve_file_directives(&mut value, &resources_dir).unwrap();
+
+        assert!(value.is_mapping(), "Expected mapping, got: {:?}", value);
+    }
+
+    #[test]
+    fn test_resolve_file_directive_in_sequence() {
+        let dir = setup_test_dir();
+        let resources_dir = dir.path().join("resources");
+        fs::write(
+            resources_dir.join("s1.json"),
+            r#"{"Sid": "stmt1", "Effect": "Allow"}"#,
+        )
+        .unwrap();
+        fs::write(
+            resources_dir.join("s2.json"),
+            r#"{"Sid": "stmt2", "Effect": "Deny"}"#,
+        )
+        .unwrap();
+
+        let mut value = serde_yaml::Value::Sequence(vec![
+            serde_yaml::Value::String("file(s1.json)".to_string()),
+            serde_yaml::Value::String("file(s2.json)".to_string()),
+        ]);
+        resolve_file_directives(&mut value, &resources_dir).unwrap();
+
+        let seq = value.as_sequence().unwrap();
+        assert_eq!(seq.len(), 2);
+        assert!(seq[0].is_mapping());
+        assert!(seq[1].is_mapping());
+    }
+
+    #[test]
+    fn test_resolve_file_directive_nested_in_mapping() {
+        let dir = setup_test_dir();
+        let resources_dir = dir.path().join("resources");
+        fs::write(
+            resources_dir.join("stmts.json"),
+            r#"[{"Effect": "Allow"}]"#,
+        )
+        .unwrap();
+
+        let mut map = serde_yaml::Mapping::new();
+        map.insert(
+            serde_yaml::Value::String("Statement".into()),
+            serde_yaml::Value::String("file(stmts.json)".to_string()),
+        );
+        map.insert(
+            serde_yaml::Value::String("Version".into()),
+            serde_yaml::Value::String("2012-10-17".into()),
+        );
+        let mut value = serde_yaml::Value::Mapping(map);
+
+        resolve_file_directives(&mut value, &resources_dir).unwrap();
+
+        let resolved_map = value.as_mapping().unwrap();
+        let statement = resolved_map
+            .get(serde_yaml::Value::String("Statement".into()))
+            .unwrap();
+        assert!(statement.is_sequence(), "Statement should be a sequence");
+    }
+
+    #[test]
+    fn test_resolve_file_directive_subdirectory() {
+        let dir = setup_test_dir();
+        let resources_dir = dir.path().join("resources");
+        fs::create_dir_all(resources_dir.join("policies")).unwrap();
+        fs::write(
+            resources_dir.join("policies/stmt.json"),
+            r#"{"Effect": "Allow"}"#,
+        )
+        .unwrap();
+
+        let mut value = serde_yaml::Value::String("file(policies/stmt.json)".to_string());
+        resolve_file_directives(&mut value, &resources_dir).unwrap();
+
+        assert!(value.is_mapping());
+    }
+
+    #[test]
+    fn test_resolve_file_directive_missing_file() {
+        let dir = setup_test_dir();
+        let resources_dir = dir.path().join("resources");
+
+        let mut value = serde_yaml::Value::String("file(nonexistent.json)".to_string());
+        let result = resolve_file_directives(&mut value, &resources_dir);
+
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(err_msg.contains("nonexistent.json"));
+    }
+
+    #[test]
+    fn test_resolve_file_directive_leaves_non_directives_alone() {
+        let dir = setup_test_dir();
+        let resources_dir = dir.path().join("resources");
+
+        let mut value = serde_yaml::Value::String("just a normal string".to_string());
+        resolve_file_directives(&mut value, &resources_dir).unwrap();
+
+        assert_eq!(value, serde_yaml::Value::String("just a normal string".into()));
+    }
+
+    #[test]
+    fn test_resolve_file_directive_leaves_template_vars_alone() {
+        let dir = setup_test_dir();
+        let resources_dir = dir.path().join("resources");
+
+        let mut value =
+            serde_yaml::Value::String("{{ stack_name }}-{{ stack_env }}-policy".to_string());
+        resolve_file_directives(&mut value, &resources_dir).unwrap();
+
+        assert_eq!(
+            value,
+            serde_yaml::Value::String("{{ stack_name }}-{{ stack_env }}-policy".into())
+        );
+    }
+
+    #[test]
+    fn test_load_manifest_with_file_directives() {
+        let dir = setup_test_dir();
+        let resources_dir = dir.path().join("resources");
+
+        // Write a JSON file to be included
+        fs::write(
+            resources_dir.join("test_stmt.json"),
+            r#"[{"Effect": "Allow", "Action": ["s3:*"], "Resource": ["*"]}]"#,
+        )
+        .unwrap();
+
+        // Write a manifest that uses file()
+        let manifest_content = r#"
+version: 1
+name: test-stack
+description: test
+providers:
+  - aws
+resources:
+  - name: test_resource
+    props:
+      - name: policies
+        value:
+          - PolicyDocument:
+              Statement: file(test_stmt.json)
+              Version: '2012-10-17'
+            PolicyName: test-policy
+"#;
+        fs::write(dir.path().join("stackql_manifest.yml"), manifest_content).unwrap();
+
+        let manifest = Manifest::load_from_stack_dir(dir.path()).unwrap();
+        let resource = manifest.find_resource("test_resource").unwrap();
+        let policies_prop = resource.props.iter().find(|p| p.name == "policies").unwrap();
+        let value = policies_prop.value.as_ref().unwrap();
+
+        // The value should be a sequence with one policy
+        let seq = value.as_sequence().unwrap();
+        assert_eq!(seq.len(), 1);
+
+        // The PolicyDocument.Statement should be a resolved array
+        let policy = seq[0].as_mapping().unwrap();
+        let doc = policy
+            .get(serde_yaml::Value::String("PolicyDocument".into()))
+            .unwrap()
+            .as_mapping()
+            .unwrap();
+        let statement = doc
+            .get(serde_yaml::Value::String("Statement".into()))
+            .unwrap();
+        assert!(
+            statement.is_sequence(),
+            "Statement should be resolved to a sequence, got: {:?}",
+            statement
+        );
+    }
+
+    #[test]
+    fn test_nested_file_directives() {
+        let dir = setup_test_dir();
+        let resources_dir = dir.path().join("resources");
+
+        // A JSON file that itself references nothing (nested resolution test base)
+        fs::write(
+            resources_dir.join("inner.json"),
+            r#"{"Action": ["s3:GetObject"]}"#,
+        )
+        .unwrap();
+
+        // An outer YAML file that includes the inner file
+        fs::write(
+            resources_dir.join("outer.yaml"),
+            "Effect: Allow\nDetails: file(inner.json)\n",
+        )
+        .unwrap();
+
+        let mut value = serde_yaml::Value::String("file(outer.yaml)".to_string());
+        resolve_file_directives(&mut value, &resources_dir).unwrap();
+
+        let map = value.as_mapping().unwrap();
+        let details = map
+            .get(serde_yaml::Value::String("Details".into()))
+            .unwrap();
+        assert!(
+            details.is_mapping(),
+            "Nested file() should be resolved, got: {:?}",
+            details
+        );
     }
 }
