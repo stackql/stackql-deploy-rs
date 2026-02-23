@@ -1,0 +1,47 @@
+/*+ exists */
+SELECT count(*) as count
+FROM awscc.iam.roles
+WHERE region = 'us-east-1' AND Identifier = '{{ role_name }}'
+;
+
+/*+ create */
+INSERT INTO awscc.iam.roles (
+ AssumeRolePolicyDocument,
+ region
+)
+SELECT
+'{{ assume_role_policy_document }}',
+'{{ region }}';
+
+/*+ update */
+UPDATE awscc.iam.roles
+SET PatchDocument = string('{{ {
+    "AssumeRolePolicyDocument": assume_role_policy_document,
+    "Description": description,
+    "ManagedPolicyArns": managed_policy_arns,
+    "MaxSessionDuration": max_session_duration,
+    "PermissionsBoundary": permissions_boundary,
+    "Policies": policies,
+    "Tags": tags
+} | generate_patch_document }}')
+WHERE region = '{{ region }}'
+AND Identifier = '{{ role_name }}';
+
+/*+ statecheck, retries=5, retry_delay=10 */
+SELECT count(*) as count
+FROM awscc.iam.roles
+WHERE 
+region = {{ region }} AND
+region = 'us-east-1' AND Identifier = '{{ role_name }}'
+;
+
+/*+ exports */
+SELECT region
+FROM awscc.iam.roles
+WHERE region = 'us-east-1' AND Identifier = '{{ role_name }}'
+;
+
+/*+ delete */
+DELETE FROM awscc.iam.roles
+WHERE Identifier = '{{ role_name }}'
+AND region = 'us-east-1';
