@@ -284,6 +284,10 @@ pub fn render_properties(
 
 /// Build the full context for a resource by merging global context with resource properties.
 /// Matches Python's `get_full_context`.
+///
+/// Injects `resource_name` as a special variable (like `stack_name` and `stack_env`)
+/// containing the current resource's name. Any global values that contain deferred
+/// template expressions (e.g., `{{ resource_name }}`) are re-rendered at this point.
 pub fn get_full_context(
     engine: &TemplateEngine,
     global_context: &HashMap<String, String>,
@@ -292,15 +296,58 @@ pub fn get_full_context(
 ) -> HashMap<String, String> {
     debug!("Getting full context for {}...", resource.name);
 
-    let prop_context = render_properties(engine, &resource.props, global_context, stack_env);
+    // Inject resource_name into the context so it's available in props and re-rendered globals
+    let mut context_with_resource_name = global_context.clone();
+    context_with_resource_name.insert("resource_name".to_string(), resource.name.clone());
 
-    let mut full_context = global_context.clone();
+    // Re-render any global values that contain deferred template expressions.
+    // This allows globals (e.g., global_tags) to use {{ resource_name }} which couldn't
+    // be resolved at global rendering time since the resource wasn't known yet.
+    let resolved_context =
+        re_render_context_with_deferred_vars(engine, &context_with_resource_name);
+
+    let prop_context = render_properties(engine, &resource.props, &resolved_context, stack_env);
+
+    let mut full_context = resolved_context;
     for (k, v) in prop_context {
         full_context.insert(k, v);
     }
 
     debug!("Full context for {}: {:?}", resource.name, full_context);
     full_context
+}
+
+/// Re-render context values that contain deferred template expressions (`{{ ... }}`).
+/// This is used to resolve variables like `resource_name` that weren't available
+/// when globals were initially rendered.
+fn re_render_context_with_deferred_vars(
+    engine: &TemplateEngine,
+    context: &HashMap<String, String>,
+) -> HashMap<String, String> {
+    let mut result = context.clone();
+
+    for (key, value) in context {
+        if value.contains("{{") {
+            match engine.render(value, context) {
+                Ok(rendered) => {
+                    let rendered = rendered.replace("True", "true").replace("False", "false");
+                    debug!(
+                        "Re-rendered deferred global [{}]: {} -> {}",
+                        key, value, rendered
+                    );
+                    result.insert(key.clone(), rendered);
+                }
+                Err(e) => {
+                    debug!(
+                        "Warning: could not re-render deferred global '{}': {}",
+                        key, e
+                    );
+                }
+            }
+        }
+    }
+
+    result
 }
 
 /// Prepare context for SQL query rendering.
@@ -349,5 +396,154 @@ pub fn is_json(s: &str) -> bool {
     match serde_json::from_str::<JsonValue>(s) {
         Ok(v) => v.is_object() || v.is_array(),
         Err(_) => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::resource::manifest::{Property, Resource};
+
+    /// Helper to create a minimal Resource for testing.
+    fn make_resource(name: &str, props: Vec<Property>) -> Resource {
+        Resource {
+            name: name.to_string(),
+            r#type: "resource".to_string(),
+            file: None,
+            sql: None,
+            run: None,
+            props,
+            exports: vec![],
+            protected: vec![],
+            description: String::new(),
+            r#if: None,
+            skip_validation: None,
+            auth: None,
+        }
+    }
+
+    /// Helper to create a Property with a simple string value.
+    fn make_prop(name: &str, value: &str) -> Property {
+        Property {
+            name: name.to_string(),
+            value: Some(serde_yaml::Value::String(value.to_string())),
+            values: None,
+            description: String::new(),
+            merge: None,
+        }
+    }
+
+    #[test]
+    fn test_resource_name_available_in_full_context() {
+        let engine = TemplateEngine::new();
+        let mut global_context = HashMap::new();
+        global_context.insert("stack_name".to_string(), "my-stack".to_string());
+        global_context.insert("stack_env".to_string(), "dev".to_string());
+
+        let resource = make_resource("cross_account_role", vec![]);
+
+        let ctx = get_full_context(&engine, &global_context, &resource, "dev");
+
+        assert_eq!(ctx.get("resource_name").unwrap(), "cross_account_role");
+        // Existing variables still present
+        assert_eq!(ctx.get("stack_name").unwrap(), "my-stack");
+        assert_eq!(ctx.get("stack_env").unwrap(), "dev");
+    }
+
+    #[test]
+    fn test_resource_name_usable_in_props() {
+        let engine = TemplateEngine::new();
+        let mut global_context = HashMap::new();
+        global_context.insert("stack_name".to_string(), "my-stack".to_string());
+        global_context.insert("stack_env".to_string(), "dev".to_string());
+
+        let resource = make_resource(
+            "cross_account_role",
+            vec![make_prop("tag_value", "{{ resource_name }}")],
+        );
+
+        let ctx = get_full_context(&engine, &global_context, &resource, "dev");
+
+        assert_eq!(ctx.get("tag_value").unwrap(), "cross_account_role");
+    }
+
+    #[test]
+    fn test_resource_name_resolves_in_deferred_globals() {
+        let engine = TemplateEngine::new();
+        let mut global_context = HashMap::new();
+        global_context.insert("stack_name".to_string(), "my-stack".to_string());
+        global_context.insert("stack_env".to_string(), "dev".to_string());
+        // Simulate a global that was rendered at startup but contained {{ resource_name }}
+        // which couldn't be resolved then, so it's preserved as a literal.
+        global_context.insert(
+            "global_tags".to_string(),
+            r#"[{"Key":"stackql:resource-name","Value":"{{ resource_name }}"}]"#.to_string(),
+        );
+
+        let resource = make_resource("cross_account_role", vec![]);
+
+        let ctx = get_full_context(&engine, &global_context, &resource, "dev");
+
+        let global_tags = ctx.get("global_tags").unwrap();
+        assert!(
+            global_tags.contains("cross_account_role"),
+            "global_tags should contain the resolved resource name, got: {}",
+            global_tags
+        );
+        assert!(
+            !global_tags.contains("{{ resource_name }}"),
+            "global_tags should not contain unresolved template expression"
+        );
+    }
+
+    #[test]
+    fn test_resource_name_varies_per_resource() {
+        let engine = TemplateEngine::new();
+        let mut global_context = HashMap::new();
+        global_context.insert("stack_name".to_string(), "my-stack".to_string());
+        global_context.insert("stack_env".to_string(), "dev".to_string());
+        global_context.insert(
+            "global_tags".to_string(),
+            r#"[{"Key":"res","Value":"{{ resource_name }}"}]"#.to_string(),
+        );
+
+        let res1 = make_resource("vpc_network", vec![]);
+        let res2 = make_resource("storage_bucket", vec![]);
+
+        let ctx1 = get_full_context(&engine, &global_context, &res1, "dev");
+        let ctx2 = get_full_context(&engine, &global_context, &res2, "dev");
+
+        assert_eq!(ctx1.get("resource_name").unwrap(), "vpc_network");
+        assert_eq!(ctx2.get("resource_name").unwrap(), "storage_bucket");
+        assert!(ctx1.get("global_tags").unwrap().contains("vpc_network"));
+        assert!(ctx2.get("global_tags").unwrap().contains("storage_bucket"));
+    }
+
+    #[test]
+    fn test_re_render_context_no_templates_is_noop() {
+        let engine = TemplateEngine::new();
+        let mut context = HashMap::new();
+        context.insert("stack_name".to_string(), "my-stack".to_string());
+        context.insert("plain_value".to_string(), "no templates here".to_string());
+
+        let result = re_render_context_with_deferred_vars(&engine, &context);
+
+        assert_eq!(result.get("stack_name").unwrap(), "my-stack");
+        assert_eq!(result.get("plain_value").unwrap(), "no templates here");
+    }
+
+    #[test]
+    fn test_re_render_context_resolves_deferred_vars() {
+        let engine = TemplateEngine::new();
+        let mut context = HashMap::new();
+        context.insert("resource_name".to_string(), "my_resource".to_string());
+        context.insert(
+            "tag".to_string(),
+            "resource:{{ resource_name }}".to_string(),
+        );
+
+        let result = re_render_context_with_deferred_vars(&engine, &context);
+
+        assert_eq!(result.get("tag").unwrap(), "resource:my_resource");
     }
 }
