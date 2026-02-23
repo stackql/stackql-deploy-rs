@@ -180,14 +180,28 @@ impl CommandRunner {
         info!("running {} check for [{}]...", check_type, resource.name);
         show_query(show_queries, exists_query);
 
-        perform_retries(
+        let exists = perform_retries(
             &resource.name,
             exists_query,
             retries,
             retry_delay,
             &mut self.client,
             delete_test,
-        )
+        );
+
+        if delete_test {
+            if exists {
+                info!("[{}] still exists", resource.name);
+            } else {
+                info!("[{}] confirmed deleted", resource.name);
+            }
+        } else if exists {
+            info!("[{}] exists", resource.name);
+        } else {
+            info!("[{}] does not exist", resource.name);
+        }
+
+        exists
     }
 
     /// Check if a resource is in the correct state.

@@ -33,6 +33,9 @@ pub enum ManifestError {
 
     #[error("Failed to resolve file() directive: {0}")]
     FileIncludeError(String),
+
+    #[error("Manifest validation failed: {0}")]
+    ValidationFailed(String),
 }
 
 /// Type alias for ManifestResult
@@ -385,6 +388,12 @@ impl Manifest {
                     )));
                 }
             }
+        }
+
+        // Run the extensible validation rule-set
+        if let Err(errors) = crate::resource::validation::validate_manifest(self) {
+            let messages: Vec<String> = errors.iter().map(|e| e.to_string()).collect();
+            return Err(ManifestError::ValidationFailed(messages.join("; ")));
         }
 
         Ok(())

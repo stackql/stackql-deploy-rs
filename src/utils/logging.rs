@@ -1,7 +1,7 @@
 // utils/logging.rs
 
 use chrono::Local;
-use env_logger::{Builder, Env};
+use env_logger::Builder;
 use log::LevelFilter;
 use std::io::Write;
 use std::path::Path;
@@ -47,7 +47,7 @@ pub fn initialize_logger(log_level: &str) {
         _ => LevelFilter::Info,
     };
 
-    let mut builder = Builder::from_env(Env::default());
+    let mut builder = Builder::new();
 
     builder.format(|buf, record| {
         let timestamp = Local::now().format("%Y-%m-%dT%H:%M:%SZ");

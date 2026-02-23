@@ -50,8 +50,11 @@ pub fn log_level() -> Arg {
     Arg::new("log-level")
         .long("log-level")
         .help("Set the logging level")
-        .default_value("INFO")
-        .value_parser(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
+        .default_value("info")
+        .value_parser(clap::builder::PossibleValuesParser::new([
+            "trace", "debug", "info", "warn", "error",
+        ]))
+        .ignore_case(true)
 }
 
 /// Common argument for specifying an environment file

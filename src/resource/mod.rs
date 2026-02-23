@@ -10,6 +10,7 @@
 
 // pub mod exports;
 pub mod manifest;
+pub mod validation;
 // pub mod operations;
 // pub mod queries;
 

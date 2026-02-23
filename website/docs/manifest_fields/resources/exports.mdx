@@ -3,7 +3,7 @@ import LeftAlignedTable from '@site/src/components/LeftAlignedTable';
 
 <LeftAlignedTable type="string[]" required={false} />
 
-Variables exported from the `resource`
+Variables exported from the `resource`.
 
 <File name='stackql_manifest.yml'>
 
@@ -31,5 +31,51 @@ FROM google.compute.networks
 WHERE name = '{{ vpc_name }}'
 AND project = '{{ project }}'
 ```
+
+:::
+
+## Export scoping
+
+Every exported variable is stored under **two keys** simultaneously:
+
+| Key form | Behaviour |
+|---|---|
+| `{var}` | **Global (unscoped)** — available by the short name throughout the rest of the stack. If a later resource exports a variable with the same name, the global key is overwritten with the new value. |
+| `{resource_name}.{var}` | **Resource-scoped (fully qualified)** — written once when the resource is processed and **never overwritten**, even if another resource later exports a variable with the same name. |
+
+### Example
+
+Given a resource named `aws_cross_account_role` that exports `role_name`:
+
+<File name='stackql_manifest.yml'>
+
+```yaml
+resources:
+- name: aws_cross_account_role
+  ...
+  exports:
+  - role_name
+```
+
+</File>
+
+After `aws_cross_account_role` is processed, two variables are available in subsequent resources and query templates:
+
+| Variable | Value | Mutability |
+|---|---|---|
+| `{{ role_name }}` | The exported value | Mutable — can be superseded by a later export |
+| `{{ aws_cross_account_role.role_name }}` | The exported value | **Immutable** — fixed for the lifetime of the deployment |
+
+:::tip
+
+Use the fully-qualified form `{{ resource_name.var }}` whenever you need an unambiguous reference that is guaranteed not to be overridden by a subsequent resource.
+
+Use the short form `{{ var }}` for convenience when you know the variable name is unique across the stack, or when you intentionally want the most recently exported value.
+
+:::
+
+:::info Resource name uniqueness
+
+Because resource-scoped export keys are immutable and tied to the resource name, **every resource name in a stack must be unique**.  A duplicate resource name is a validation error that prevents the stack from being deployed.  See [`resource.name`](./name) for more details.
 
 :::

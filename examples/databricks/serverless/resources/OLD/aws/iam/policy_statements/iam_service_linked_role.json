@@ -1,0 +1,15 @@
+{
+  "Effect": "Allow",
+  "Action": [
+    "iam:CreateServiceLinkedRole",
+    "iam:PutRolePolicy"
+  ],
+  "Resource": [
+    "arn:aws:iam::*:role/aws-service-role/spot.amazonaws.com/AWSServiceRoleForEC2Spot"
+  ],
+  "Condition": {
+    "StringLike": {
+      "iam:AWSServiceName": "spot.amazonaws.com"
+    }
+  }
+}

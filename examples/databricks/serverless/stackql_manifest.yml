@@ -72,21 +72,24 @@ resources:
         merge:
           - global_tags
     exports:
-      - aws_iam_role_name: aws_iam_cross_account_role_name
-      - aws_iam_role_arn: aws_iam_cross_account_role_arn
+      - role_name: aws_iam_cross_account_role_name
+      - arn: aws_iam_cross_account_role_arn
 
-  # - name: databricks_account/credentials
-  #   props:
-  #     - name: credentials_name
-  #       value: "{{ stack_name }}-{{ stack_env }}-credentials"
-  #     - name: aws_credentials
-  #       value:
-  #         sts_role:
-  #           role_arn: "{{ aws_iam_cross_account_role_arn }}"
-  #   exports:
-  #     - databricks_credentials_name
-  #     - databricks_credentials_id
-  #     - databricks_role_external_id
+  - name: databricks_account_credentials
+    file: databricks_account/credentials.iql
+    props:
+      - name: account_id
+        value: "{{ databricks_account_id }}"      
+      - name: credentials_name
+        value: "{{ stack_name }}-{{ stack_env }}-credentials"
+      - name: aws_credentials
+        value:
+          sts_role:
+            role_arn: "{{ aws_iam_cross_account_role_arn }}"
+    exports:
+      - credentials_name
+      - credentials_id
+      - databricks_role_external_id
 
 # ====================================================================================
 # Storage

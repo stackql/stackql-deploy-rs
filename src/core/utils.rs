@@ -458,20 +458,51 @@ fn is_version_higher(installed: &str, requested: &str) -> bool {
 }
 
 /// Update global context with exported values.
+///
+/// Each export is stored under two keys:
+///
+/// - **`{key}`** — the global (unscoped) key.  This can be overridden by a
+///   subsequent resource that exports a variable with the same name, so it
+///   always reflects the *most recent* export value.
+///
+/// - **`{resource_name}.{key}`** — the resource-scoped (fully qualified) key.
+///   This is written **once** and never overwritten, so it is immutable once
+///   set.  Consumers that need an unambiguous reference should use this form.
+///
 /// Matches Python's `export_vars`.
 pub fn export_vars(
     global_context: &mut HashMap<String, String>,
-    _resource_name: &str,
+    resource_name: &str,
     export_data: &HashMap<String, String>,
     protected_exports: &[String],
 ) {
     for (key, value) in export_data {
-        if protected_exports.contains(key) {
-            let mask = "*".repeat(value.len());
-            info!("set protected variable [{}] to [{}] in exports", key, mask);
+        let is_protected = protected_exports.contains(key);
+        let display_value = if is_protected {
+            "*".repeat(value.len())
         } else {
-            info!("set [{}] to [{}] in exports", key, value);
+            value.clone()
+        };
+
+        // --- resource-scoped key (immutable: only written if not already set) ---
+        let scoped_key = format!("{}.{}", resource_name, key);
+        if !global_context.contains_key(&scoped_key) {
+            info!(
+                "set {} [{}] to [{}] in exports",
+                if is_protected { "protected variable" } else { "variable" },
+                scoped_key,
+                display_value,
+            );
+            global_context.insert(scoped_key, value.clone());
         }
+
+        // --- global (unscoped) key (can be overridden by later resources) ---
+        info!(
+            "set {} [{}] to [{}] in exports",
+            if is_protected { "protected variable" } else { "variable" },
+            key,
+            display_value,
+        );
         global_context.insert(key.clone(), value.clone());
     }
 }
@@ -564,5 +595,92 @@ pub fn run_ext_script(
             }
         }
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ------------------------------------------------------------------
+    // export_vars
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_export_vars_sets_global_and_scoped_key() {
+        let mut ctx: HashMap<String, String> = HashMap::new();
+        let mut data: HashMap<String, String> = HashMap::new();
+        data.insert("role_name".to_string(), "my-role".to_string());
+
+        export_vars(&mut ctx, "aws_cross_account_role", &data, &[]);
+
+        // Global key
+        assert_eq!(ctx.get("role_name").map(|s| s.as_str()), Some("my-role"));
+        // Resource-scoped key
+        assert_eq!(
+            ctx.get("aws_cross_account_role.role_name").map(|s| s.as_str()),
+            Some("my-role"),
+        );
+    }
+
+    #[test]
+    fn test_export_vars_global_key_is_overridable() {
+        let mut ctx: HashMap<String, String> = HashMap::new();
+
+        // First resource exports role_name
+        let mut data1 = HashMap::new();
+        data1.insert("role_name".to_string(), "first-role".to_string());
+        export_vars(&mut ctx, "resource_a", &data1, &[]);
+
+        // Second resource exports role_name with a different value
+        let mut data2 = HashMap::new();
+        data2.insert("role_name".to_string(), "second-role".to_string());
+        export_vars(&mut ctx, "resource_b", &data2, &[]);
+
+        // Global key reflects the most recent export
+        assert_eq!(ctx.get("role_name").map(|s| s.as_str()), Some("second-role"));
+    }
+
+    #[test]
+    fn test_export_vars_scoped_key_is_immutable() {
+        let mut ctx: HashMap<String, String> = HashMap::new();
+
+        // First resource exports role_name
+        let mut data1 = HashMap::new();
+        data1.insert("role_name".to_string(), "original-role".to_string());
+        export_vars(&mut ctx, "resource_a", &data1, &[]);
+
+        // Simulate an accidental re-export of the same resource (e.g. called
+        // twice): the scoped key must not be overwritten.
+        let mut data2 = HashMap::new();
+        data2.insert("role_name".to_string(), "should-not-overwrite".to_string());
+        export_vars(&mut ctx, "resource_a", &data2, &[]);
+
+        // Scoped key is unchanged
+        assert_eq!(
+            ctx.get("resource_a.role_name").map(|s| s.as_str()),
+            Some("original-role"),
+        );
+        // Global key reflects the latest call (expected)
+        assert_eq!(
+            ctx.get("role_name").map(|s| s.as_str()),
+            Some("should-not-overwrite"),
+        );
+    }
+
+    #[test]
+    fn test_export_vars_protected_values_are_stored_normally() {
+        // Protection only affects log-masking, not what is stored
+        let mut ctx: HashMap<String, String> = HashMap::new();
+        let mut data = HashMap::new();
+        data.insert("secret_key".to_string(), "super-secret".to_string());
+
+        export_vars(&mut ctx, "vault", &data, &["secret_key".to_string()]);
+
+        assert_eq!(ctx.get("secret_key").map(|s| s.as_str()), Some("super-secret"));
+        assert_eq!(
+            ctx.get("vault.secret_key").map(|s| s.as_str()),
+            Some("super-secret"),
+        );
     }
 }

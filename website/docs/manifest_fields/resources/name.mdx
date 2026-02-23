@@ -20,3 +20,13 @@ resources:
 You can reference the current resource's name using `{{ resource_name }}` in property values or query templates. See [Built-in variables](../../../manifest-file#name) for more details.
 
 :::
+
+:::warning Resource names must be unique
+
+Every resource name in a stack must be **unique**.  Duplicate names are rejected at load time before any command (`build`, `plan`, `teardown`, `test`) is executed.
+
+This requirement exists because resource names are used as a namespace prefix for exports.  When a resource named `my_role` exports `role_name`, the fully-qualified key `my_role.role_name` is written once and never overwritten.  A second resource with the name `my_role` would conflict with those immutable scoped export keys.
+
+See [resource.exports](./exports#export-scoping) for more details on export scoping.
+
+:::
