@@ -3,7 +3,7 @@ import LeftAlignedTable from '@site/src/components/LeftAlignedTable';
 
 <LeftAlignedTable type="string" required={true} />
 
-The name of the resource
+The name of the resource. This value is automatically exposed as the built-in variable `resource_name` during processing, making it available in property values and query templates for the current resource.
 
 <File name='stackql_manifest.yml'>
 
@@ -14,3 +14,9 @@ resources:
 ```
 
 </File>
+
+:::tip
+
+You can reference the current resource's name using `{{ resource_name }}` in property values or query templates. See [Built-in variables](../../../manifest-file#name) for more details.
+
+:::
