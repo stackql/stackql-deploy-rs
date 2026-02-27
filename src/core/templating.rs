@@ -294,8 +294,16 @@ pub fn render_query(
         res_name, anchor, template
     );
 
+    let expanded = match preprocess_this_prefix(template, res_name) {
+        Ok(t) => t,
+        Err(e) => {
+            error!("[{}] [{}] {}", res_name, anchor, e);
+            process::exit(1);
+        }
+    };
+
     let mut ctx = temp_context;
-    let compat_query = preprocess_jinja2_compat(template);
+    let compat_query = preprocess_jinja2_compat(&expanded);
     let processed_query = preprocess_inline_dicts(&compat_query, &mut ctx);
 
     let template_name = format!("{}__{}", res_name, anchor);
@@ -431,6 +439,46 @@ pub fn get_queries(
     result
 }
 
+/// Pre-process `this.` prefix inside Tera template blocks.
+///
+/// Within every `{{ ... }}` and `{% ... %}` block, replaces `this.` with
+/// `{resource_name}.`, allowing resource-scoped variables to be referenced
+/// unambiguously inside a resource's own `.iql` file.
+///
+/// Returns `Err` with a diagnostic if `this.` appears but `resource_name`
+/// is empty (i.e. no active resource context, such as a global template).
+pub fn preprocess_this_prefix(template: &str, resource_name: &str) -> Result<String, String> {
+    if !template.contains("this.") {
+        return Ok(template.to_string());
+    }
+
+    if resource_name.is_empty() {
+        return Err(
+            "Template uses 'this.' prefix but no resource context is active; \
+             'this.' is only valid inside a resource's .iql file."
+                .to_string(),
+        );
+    }
+
+    let replacement = format!("{}.", resource_name);
+
+    // Replace 'this.' with '{resource_name}.' inside {{ ... }} blocks.
+    let var_re = Regex::new(r"(?s)\{\{(.*?)\}\}").unwrap();
+    let with_vars = var_re.replace_all(template, |caps: &regex::Captures| {
+        let inner = caps[1].replace("this.", &replacement);
+        format!("{{{{{}}}}}", inner)
+    });
+
+    // Also handle {% ... %} tag blocks (conditionals, loops).
+    let tag_re = Regex::new(r"(?s)\{%(.*?)%\}").unwrap();
+    let with_tags = tag_re.replace_all(&with_vars, |caps: &regex::Captures| {
+        let inner = caps[1].replace("this.", &replacement);
+        format!("{{%{}%}}", inner)
+    });
+
+    Ok(with_tags.to_string())
+}
+
 /// Render an inline SQL template string.
 /// Matches Python's `render_inline_template`.
 pub fn render_inline_template(
@@ -445,7 +493,16 @@ pub fn render_inline_template(
     );
 
     let mut temp_context = prepare_query_context(full_context);
-    let compat = preprocess_jinja2_compat(template_string);
+
+    let expanded = match preprocess_this_prefix(template_string, resource_name) {
+        Ok(t) => t,
+        Err(e) => {
+            error!("[{}] inline template: {}", resource_name, e);
+            process::exit(1);
+        }
+    };
+
+    let compat = preprocess_jinja2_compat(&expanded);
     let processed = preprocess_inline_dicts(&compat, &mut temp_context);
     let template_name = format!("{}__inline", resource_name);
 
@@ -493,5 +550,167 @@ pub fn render_inline_template(
 
             process::exit(1);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::template::engine::TemplateEngine;
+
+    // ── preprocess_this_prefix unit tests ─────────────────────────────────
+
+    #[test]
+    fn test_preprocess_this_prefix_basic_rewrite() {
+        let result = preprocess_this_prefix("{{ this.fred }}", "resource_name_x").unwrap();
+        assert_eq!(result, "{{ resource_name_x.fred }}");
+    }
+
+    #[test]
+    fn test_preprocess_this_prefix_noop_when_no_this() {
+        let template = "{{ fred }}";
+        let result = preprocess_this_prefix(template, "resource_name_x").unwrap();
+        assert_eq!(result, template, "template without 'this.' should be unchanged");
+    }
+
+    #[test]
+    fn test_preprocess_this_prefix_error_when_no_resource_name() {
+        let result = preprocess_this_prefix("{{ this.fred }}", "");
+        assert!(result.is_err(), "empty resource_name should return Err");
+        let msg = result.unwrap_err();
+        assert!(
+            msg.contains("this.") || msg.contains("resource context"),
+            "error message should mention 'this.' or resource context, got: {}",
+            msg
+        );
+    }
+
+    #[test]
+    fn test_preprocess_this_prefix_multiple_occurrences() {
+        let template = "{{ this.a }} and {{ this.b }}";
+        let result = preprocess_this_prefix(template, "my_res").unwrap();
+        assert_eq!(result, "{{ my_res.a }} and {{ my_res.b }}");
+    }
+
+    #[test]
+    fn test_preprocess_this_prefix_deep_path() {
+        let template = "{{ this.callback.ProgressEvent.RequestToken }}";
+        let result = preprocess_this_prefix(template, "resource_name_x").unwrap();
+        assert_eq!(
+            result,
+            "{{ resource_name_x.callback.ProgressEvent.RequestToken }}"
+        );
+    }
+
+    #[test]
+    fn test_preprocess_this_prefix_in_tag_block() {
+        let template = "{% if this.flag %}yes{% endif %}";
+        let result = preprocess_this_prefix(template, "res").unwrap();
+        assert_eq!(result, "{% if res.flag %}yes{% endif %}");
+    }
+
+    #[test]
+    fn test_preprocess_this_prefix_with_filter() {
+        let template = "{{ this.tags | from_json }}";
+        let result = preprocess_this_prefix(template, "my_vpc").unwrap();
+        assert_eq!(result, "{{ my_vpc.tags | from_json }}");
+    }
+
+    // ── End-to-end rendering tests via TemplateEngine ─────────────────────
+
+    #[test]
+    fn test_this_resolves_resource_scoped_over_global() {
+        // When both a global 'fred' and a resource-scoped 'resource_name_x.fred'
+        // exist, {{ this.fred }} must resolve to the resource-scoped value.
+        let engine = TemplateEngine::new();
+        let mut context = std::collections::HashMap::new();
+        context.insert("fred".to_string(), "global_fred".to_string());
+        context.insert("resource_name_x.fred".to_string(), "scoped_fred".to_string());
+
+        let expanded = preprocess_this_prefix("{{ this.fred }}", "resource_name_x").unwrap();
+        let result = engine.render_with_filters("t", &expanded, &context).unwrap();
+        assert_eq!(
+            result, "scoped_fred",
+            "this.fred should resolve to the resource-scoped value, not the global"
+        );
+    }
+
+    #[test]
+    fn test_this_resolves_when_only_resource_scoped_exists() {
+        // No global 'fred' - only the resource-scoped one.
+        let engine = TemplateEngine::new();
+        let mut context = std::collections::HashMap::new();
+        context.insert("resource_name_x.fred".to_string(), "scoped_only".to_string());
+
+        let expanded = preprocess_this_prefix("{{ this.fred }}", "resource_name_x").unwrap();
+        let result = engine.render_with_filters("t", &expanded, &context).unwrap();
+        assert_eq!(result, "scoped_only");
+    }
+
+    #[test]
+    fn test_this_errors_when_only_global_exists_not_resource_scoped() {
+        // this.fred expands to resource_name_x.fred; if only a global 'fred'
+        // exists the render should fail rather than silently using the global.
+        let engine = TemplateEngine::new();
+        let mut context = std::collections::HashMap::new();
+        context.insert("fred".to_string(), "global_fred".to_string());
+        // No resource_name_x.fred in context
+
+        let expanded = preprocess_this_prefix("{{ this.fred }}", "resource_name_x").unwrap();
+        let result = engine.render_with_filters("t", &expanded, &context);
+        assert!(
+            result.is_err(),
+            "this.fred should error when resource_name_x.fred is not in context"
+        );
+    }
+
+    #[test]
+    fn test_this_callback_resolves_same_as_scoped_and_shorthand() {
+        // {{ this.callback.ProgressEvent.RequestToken }} inside resource_name_x
+        // should resolve identically to:
+        //   {{ resource_name_x.callback.ProgressEvent.RequestToken }}  (explicit)
+        //   {{ callback.ProgressEvent.RequestToken }}                  (shorthand)
+        let engine = TemplateEngine::new();
+        let mut context = std::collections::HashMap::new();
+        context.insert(
+            "resource_name_x.callback.ProgressEvent.RequestToken".to_string(),
+            "token-abc".to_string(),
+        );
+        context.insert(
+            "callback.ProgressEvent.RequestToken".to_string(),
+            "token-abc".to_string(),
+        );
+
+        let expanded = preprocess_this_prefix(
+            "{{ this.callback.ProgressEvent.RequestToken }}",
+            "resource_name_x",
+        )
+        .unwrap();
+
+        let via_this = engine.render_with_filters("t1", &expanded, &context).unwrap();
+        let via_explicit = engine
+            .render_with_filters(
+                "t2",
+                "{{ resource_name_x.callback.ProgressEvent.RequestToken }}",
+                &context,
+            )
+            .unwrap();
+        let via_shorthand = engine
+            .render_with_filters(
+                "t3",
+                "{{ callback.ProgressEvent.RequestToken }}",
+                &context,
+            )
+            .unwrap();
+
+        assert_eq!(via_this, "token-abc");
+        assert_eq!(
+            via_this, via_explicit,
+            "this.callback should equal resource_name_x.callback"
+        );
+        assert_eq!(
+            via_this, via_shorthand,
+            "this.callback should equal shorthand callback"
+        );
     }
 }
