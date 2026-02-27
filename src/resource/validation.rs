@@ -258,13 +258,15 @@ resources:
 "#,
         );
 
-        let manifest = Manifest::load_from_stack_dir(dir.path()).unwrap();
-        let result = validate_manifest(&manifest);
-        assert!(result.is_err(), "Duplicate names should fail validation");
-
-        let errors = result.unwrap_err();
-        assert_eq!(errors.len(), 1);
-        assert_eq!(errors[0].rule, "unique_resource_names");
-        assert!(errors[0].message.contains("my_bucket"));
+        // load_from_stack_dir already runs validate_manifest internally,
+        // so a manifest with duplicate names should fail to load.
+        let result = Manifest::load_from_stack_dir(dir.path());
+        assert!(result.is_err(), "Duplicate names should fail to load");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("my_bucket"),
+            "Error should mention the duplicate name, got: {}",
+            err_msg
+        );
     }
 }

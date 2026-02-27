@@ -13,9 +13,7 @@ use std::process;
 use log::{debug, error, info};
 use pgwire_lite::PgwireLite;
 
-use crate::core::config::{
-    get_full_context, render_globals, render_string_value,
-};
+use crate::core::config::{get_full_context, render_globals, render_string_value};
 use crate::core::env::load_env_vars;
 use crate::core::templating::{self, ParsedQuery};
 use crate::core::utils::{
@@ -817,4 +815,3 @@ fn evaluate_simple_condition(condition: &str) -> Option<bool> {
 
     None
 }
-

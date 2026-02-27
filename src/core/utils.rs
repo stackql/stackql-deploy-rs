@@ -489,7 +489,11 @@ pub fn export_vars(
         global_context.entry(scoped_key.clone()).or_insert_with(|| {
             info!(
                 "set {} [{}] to [{}] in exports",
-                if is_protected { "protected variable" } else { "variable" },
+                if is_protected {
+                    "protected variable"
+                } else {
+                    "variable"
+                },
                 scoped_key,
                 display_value,
             );
@@ -499,7 +503,11 @@ pub fn export_vars(
         // --- global (unscoped) key (can be overridden by later resources) ---
         info!(
             "set {} [{}] to [{}] in exports",
-            if is_protected { "protected variable" } else { "variable" },
+            if is_protected {
+                "protected variable"
+            } else {
+                "variable"
+            },
             key,
             display_value,
         );
@@ -618,7 +626,8 @@ mod tests {
         assert_eq!(ctx.get("role_name").map(|s| s.as_str()), Some("my-role"));
         // Resource-scoped key
         assert_eq!(
-            ctx.get("aws_cross_account_role.role_name").map(|s| s.as_str()),
+            ctx.get("aws_cross_account_role.role_name")
+                .map(|s| s.as_str()),
             Some("my-role"),
         );
     }
@@ -638,7 +647,10 @@ mod tests {
         export_vars(&mut ctx, "resource_b", &data2, &[]);
 
         // Global key reflects the most recent export
-        assert_eq!(ctx.get("role_name").map(|s| s.as_str()), Some("second-role"));
+        assert_eq!(
+            ctx.get("role_name").map(|s| s.as_str()),
+            Some("second-role")
+        );
     }
 
     #[test]
@@ -677,7 +689,10 @@ mod tests {
 
         export_vars(&mut ctx, "vault", &data, &["secret_key".to_string()]);
 
-        assert_eq!(ctx.get("secret_key").map(|s| s.as_str()), Some("super-secret"));
+        assert_eq!(
+            ctx.get("secret_key").map(|s| s.as_str()),
+            Some("super-secret")
+        );
         assert_eq!(
             ctx.get("vault.secret_key").map(|s| s.as_str()),
             Some("super-secret"),

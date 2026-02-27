@@ -98,4 +98,3 @@ pub fn on_failure() -> Arg {
         .value_parser(value_parser!(FailureAction))
         .default_value("error")
 }
-

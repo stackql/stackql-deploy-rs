@@ -90,4 +90,3 @@ macro_rules! print_success {
         println!("{}", format!($($arg)*).green())
     }};
 }
-

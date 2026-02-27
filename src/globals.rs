@@ -118,4 +118,3 @@ pub fn server_port() -> u16 {
         .copied()
         .unwrap_or(DEFAULT_SERVER_PORT)
 }
-
