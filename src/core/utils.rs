@@ -719,9 +719,6 @@ pub fn run_stackql_dml_returning(
                 }
             }
         }
-
-        thread::sleep(Duration::from_secs(retry_delay as u64));
-        attempt += 1;
     }
 
     (String::new(), None)

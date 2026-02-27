@@ -506,6 +506,7 @@ impl CommandRunner {
     /// 3. On exhaustion, call `catch_error_and_exit`.
     ///
     /// `operation` is used only for log messages (e.g. `"create"`).
+    #[allow(clippy::too_many_arguments)]
     pub fn run_callback(
         &mut self,
         resource: &Resource,

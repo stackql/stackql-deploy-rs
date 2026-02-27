@@ -73,15 +73,16 @@ fn parse_anchor(anchor: &str) -> (String, HashMap<String, u32>, HashMap<String, 
     (key, uint_options, str_options)
 }
 
-/// Load SQL queries from a .iql file, split by anchors.
-/// Matches Python's `load_sql_queries`.
-fn load_sql_queries(
-    file_path: &Path,
-) -> (
+/// Return type of `load_sql_queries`: (templates, uint_options, str_options).
+type SqlQueriesResult = (
     HashMap<String, String>,
     HashMap<String, HashMap<String, u32>>,
     HashMap<String, HashMap<String, String>>,
-) {
+);
+
+/// Load SQL queries from a .iql file, split by anchors.
+/// Matches Python's `load_sql_queries`.
+fn load_sql_queries(file_path: &Path) -> SqlQueriesResult {
     let content = match fs::read_to_string(file_path) {
         Ok(c) => c,
         Err(e) => {
