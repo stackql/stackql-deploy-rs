@@ -198,11 +198,7 @@ fn build_tera_context(context: &HashMap<String, String>) -> TeraContext {
 /// If an intermediate node already exists as a string (leaf), it is
 /// left unchanged and the deeper insertion is skipped to avoid
 /// overwriting with an object.
-fn insert_nested_key(
-    map: &mut serde_json::Map<String, serde_json::Value>,
-    key: &str,
-    value: &str,
-) {
+fn insert_nested_key(map: &mut serde_json::Map<String, serde_json::Value>, key: &str, value: &str) {
     match key.split_once('.') {
         None => {
             // Leaf – only write if the slot is not already a nested object.
@@ -554,11 +550,7 @@ mod tests {
         );
 
         let result = engine
-            .render_with_filters(
-                "t",
-                "{{ callback.ProgressEvent.RequestToken }}",
-                &context,
-            )
+            .render_with_filters("t", "{{ callback.ProgressEvent.RequestToken }}", &context)
             .unwrap();
         assert_eq!(result, "token-123");
 
@@ -599,10 +591,7 @@ mod tests {
         let engine = TemplateEngine::new();
         let mut context = HashMap::new();
         context.insert("res.export_var".to_string(), "exported".to_string());
-        context.insert(
-            "res.callback.Field.Sub".to_string(),
-            "deep_val".to_string(),
-        );
+        context.insert("res.callback.Field.Sub".to_string(), "deep_val".to_string());
 
         let result = engine
             .render_with_filters("t", "{{ res.export_var }}", &context)

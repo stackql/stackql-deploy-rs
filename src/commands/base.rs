@@ -18,8 +18,9 @@ use crate::core::env::load_env_vars;
 use crate::core::templating::{self, ParsedQuery};
 use crate::core::utils::{
     catch_error_and_exit, check_exports_as_statecheck_proxy, check_short_circuit, export_vars,
-    flatten_returning_row, has_returning_clause, perform_retries, pull_providers, run_callback_poll,
-    run_ext_script, run_stackql_command, run_stackql_dml_returning, run_stackql_query, show_query,
+    flatten_returning_row, has_returning_clause, perform_retries, pull_providers,
+    run_callback_poll, run_ext_script, run_stackql_command, run_stackql_dml_returning,
+    run_stackql_query, show_query,
 };
 use crate::resource::manifest::{Manifest, Resource};
 use crate::resource::validation::validate_manifest;
@@ -537,10 +538,7 @@ impl CommandRunner {
             }
         }
 
-        info!(
-            "running {} callback for [{}]...",
-            operation, resource.name
-        );
+        info!("running {} callback for [{}]...", operation, resource.name);
         show_query(show_queries, callback_query);
 
         let succeeded = run_callback_poll(

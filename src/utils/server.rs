@@ -74,7 +74,15 @@ pub struct RunningServer {
 /// Check if the stackql server is running on a specific port
 pub fn is_server_running(port: u16) -> bool {
     let servers = find_all_running_servers();
-    debug!("is_server_running({}): found {} candidate server(s): {:?}", port, servers.len(), servers.iter().map(|s| format!("pid={} port={}", s.pid, s.port)).collect::<Vec<_>>());
+    debug!(
+        "is_server_running({}): found {} candidate server(s): {:?}",
+        port,
+        servers.len(),
+        servers
+            .iter()
+            .map(|s| format!("pid={} port={}", s.pid, s.port))
+            .collect::<Vec<_>>()
+    );
     let result = servers.iter().any(|server| server.port == port);
     debug!("is_server_running({}) -> {}", port, result);
     result
@@ -110,20 +118,37 @@ pub fn find_all_running_servers() -> Vec<RunningServer> {
         if !output.stdout.is_empty() {
             let pids_str = String::from_utf8_lossy(&output.stdout).to_string();
             let pids = pids_str.trim().split('\n').collect::<Vec<&str>>();
-            debug!("find_all_running_servers: pgrep found {} PID(s): {:?}", pids.len(), pids);
+            debug!(
+                "find_all_running_servers: pgrep found {} PID(s): {:?}",
+                pids.len(),
+                pids
+            );
 
             for pid_str in pids {
                 if let Ok(pid) = pid_str.trim().parse::<u32>() {
                     // Log the full command line of this PID before attempting port extraction
-                    if let Ok(ps_out) = ProcessCommand::new("ps").arg("-p").arg(pid.to_string()).arg("-o").arg("args").output() {
+                    if let Ok(ps_out) = ProcessCommand::new("ps")
+                        .arg("-p")
+                        .arg(pid.to_string())
+                        .arg("-o")
+                        .arg("args")
+                        .output()
+                    {
                         let cmdline = String::from_utf8_lossy(&ps_out.stdout);
-                        debug!("find_all_running_servers: PID {} cmdline: {}", pid, cmdline.trim());
+                        debug!(
+                            "find_all_running_servers: PID {} cmdline: {}",
+                            pid,
+                            cmdline.trim()
+                        );
                     }
                     if let Some(port) = extract_port_from_ps(pid_str) {
                         debug!("find_all_running_servers: PID {} -> port {}", pid, port);
                         running_servers.push(RunningServer { pid, port });
                     } else {
-                        debug!("find_all_running_servers: PID {} -> no --pgsrv.port found, skipping", pid);
+                        debug!(
+                            "find_all_running_servers: PID {} -> no --pgsrv.port found, skipping",
+                            pid
+                        );
                     }
                 }
             }
@@ -217,7 +242,10 @@ pub fn get_server_pid(port: u16) -> Option<u32> {
 
 /// Start the stackql server with the given options
 pub fn start_server(options: &StartServerOptions) -> Result<u32, String> {
-    debug!("start_server called: host={}, port={}", options.host, options.port);
+    debug!(
+        "start_server called: host={}, port={}",
+        options.host, options.port
+    );
 
     let binary_path = match get_binary_path() {
         Some(path) => {
@@ -227,12 +255,18 @@ pub fn start_server(options: &StartServerOptions) -> Result<u32, String> {
         _none => return Err("stackql binary not found".to_string()),
     };
 
-    debug!("Checking if server is already running on port {}...", options.port);
+    debug!(
+        "Checking if server is already running on port {}...",
+        options.port
+    );
     if is_server_running(options.port) {
         info!("Server is already running on port {}", options.port);
         return Ok(get_server_pid(options.port).unwrap_or(0));
     }
-    debug!("Server not running on port {}; proceeding to start.", options.port);
+    debug!(
+        "Server not running on port {}; proceeding to start.",
+        options.port
+    );
 
     let mut cmd = ProcessCommand::new(&binary_path);
     cmd.arg("srv");
@@ -276,10 +310,16 @@ pub fn start_server(options: &StartServerOptions) -> Result<u32, String> {
 
     let pid = child.id();
     info!("Starting stackql server with PID: {}", pid);
-    debug!("Waiting 5 seconds for server on port {} to become ready...", options.port);
+    debug!(
+        "Waiting 5 seconds for server on port {} to become ready...",
+        options.port
+    );
     thread::sleep(Duration::from_secs(5));
 
-    debug!("Re-checking if server is running on port {}...", options.port);
+    debug!(
+        "Re-checking if server is running on port {}...",
+        options.port
+    );
     if is_server_running(options.port) {
         info!("Server started successfully on port {}", options.port);
         Ok(pid)
@@ -341,11 +381,17 @@ pub fn check_and_start_server() {
     debug!("check_and_start_server: host={}, port={}", host, port);
 
     if LOCAL_SERVER_ADDRESSES.contains(&host) {
-        debug!("Host '{}' is local; checking if server is running on port {}...", host, port);
+        debug!(
+            "Host '{}' is local; checking if server is running on port {}...",
+            host, port
+        );
         if is_server_running(port) {
             info!("Local server is already running on port {}.", port);
         } else {
-            debug!("Server not detected on port {}; will attempt to start it.", port);
+            debug!(
+                "Server not detected on port {}; will attempt to start it.",
+                port
+            );
             info!("Server not running. Starting server...");
 
             let options = StartServerOptions {
@@ -354,7 +400,10 @@ pub fn check_and_start_server() {
                 ..Default::default()
             };
 
-            debug!("StartServerOptions: host={}, port={}", options.host, options.port);
+            debug!(
+                "StartServerOptions: host={}, port={}",
+                options.host, options.port
+            );
 
             if let Err(e) = start_server(&options) {
                 error!("Failed to start server: {}", e);

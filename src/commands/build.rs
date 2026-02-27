@@ -395,12 +395,8 @@ fn run_build(
                             let cb_sc_field = q.options.short_circuit_field.clone();
                             let cb_sc_value = q.options.short_circuit_value.clone();
                             let cb_ctx = runner.get_full_context(resource);
-                            let rendered_cb = runner.render_query(
-                                &resource.name,
-                                anchor,
-                                &cb_template,
-                                &cb_ctx,
-                            );
+                            let rendered_cb =
+                                runner.render_query(&resource.name, anchor, &cb_template, &cb_ctx);
                             runner.run_callback(
                                 resource,
                                 &rendered_cb,
@@ -451,12 +447,8 @@ fn run_build(
                             let cb_sc_field = q.options.short_circuit_field.clone();
                             let cb_sc_value = q.options.short_circuit_value.clone();
                             let cb_ctx = runner.get_full_context(resource);
-                            let rendered_cb = runner.render_query(
-                                &resource.name,
-                                anchor,
-                                &cb_template,
-                                &cb_ctx,
-                            );
+                            let rendered_cb =
+                                runner.render_query(&resource.name, anchor, &cb_template, &cb_ctx);
                             runner.run_callback(
                                 resource,
                                 &rendered_cb,

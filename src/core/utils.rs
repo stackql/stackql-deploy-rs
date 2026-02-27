@@ -678,11 +678,7 @@ pub fn run_stackql_dml_returning(
                         let row = &rows[0];
                         let mut map = HashMap::new();
                         for (i, col_name) in col_names.iter().enumerate() {
-                            let value = row
-                                .values
-                                .get(i)
-                                .cloned()
-                                .unwrap_or_default();
+                            let value = row.values.get(i).cloned().unwrap_or_default();
                             map.insert(col_name.clone(), value);
                         }
                         Some(map)
@@ -1015,9 +1011,7 @@ mod tests {
 
     #[test]
     fn test_has_returning_clause_negative() {
-        assert!(!has_returning_clause(
-            "INSERT INTO t(col) SELECT 'val'"
-        ));
+        assert!(!has_returning_clause("INSERT INTO t(col) SELECT 'val'"));
     }
 
     // ------------------------------------------------------------------
@@ -1033,10 +1027,24 @@ mod tests {
         let mut ctx: HashMap<String, String> = HashMap::new();
         flatten_returning_row(&row, "my_resource", &mut ctx);
 
-        assert_eq!(ctx.get("callback.RequestToken").map(|s| s.as_str()), Some("tok-123"));
-        assert_eq!(ctx.get("my_resource.callback.RequestToken").map(|s| s.as_str()), Some("tok-123"));
-        assert_eq!(ctx.get("callback.OperationStatus").map(|s| s.as_str()), Some("SUCCESS"));
-        assert_eq!(ctx.get("my_resource.callback.OperationStatus").map(|s| s.as_str()), Some("SUCCESS"));
+        assert_eq!(
+            ctx.get("callback.RequestToken").map(|s| s.as_str()),
+            Some("tok-123")
+        );
+        assert_eq!(
+            ctx.get("my_resource.callback.RequestToken")
+                .map(|s| s.as_str()),
+            Some("tok-123")
+        );
+        assert_eq!(
+            ctx.get("callback.OperationStatus").map(|s| s.as_str()),
+            Some("SUCCESS")
+        );
+        assert_eq!(
+            ctx.get("my_resource.callback.OperationStatus")
+                .map(|s| s.as_str()),
+            Some("SUCCESS")
+        );
     }
 
     #[test]
@@ -1052,19 +1060,23 @@ mod tests {
         flatten_returning_row(&row, "aws_s3_bucket", &mut ctx);
 
         assert_eq!(
-            ctx.get("callback.ProgressEvent.OperationStatus").map(|s| s.as_str()),
+            ctx.get("callback.ProgressEvent.OperationStatus")
+                .map(|s| s.as_str()),
             Some("SUCCESS")
         );
         assert_eq!(
-            ctx.get("callback.ProgressEvent.RequestToken").map(|s| s.as_str()),
+            ctx.get("callback.ProgressEvent.RequestToken")
+                .map(|s| s.as_str()),
             Some("abc")
         );
         assert_eq!(
-            ctx.get("aws_s3_bucket.callback.ProgressEvent.OperationStatus").map(|s| s.as_str()),
+            ctx.get("aws_s3_bucket.callback.ProgressEvent.OperationStatus")
+                .map(|s| s.as_str()),
             Some("SUCCESS")
         );
         assert_eq!(
-            ctx.get("aws_s3_bucket.callback.ProgressEvent.RequestToken").map(|s| s.as_str()),
+            ctx.get("aws_s3_bucket.callback.ProgressEvent.RequestToken")
+                .map(|s| s.as_str()),
             Some("abc")
         );
     }

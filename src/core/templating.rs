@@ -52,9 +52,7 @@ pub struct QueryOptions {
 /// Returns `(key, uint_options, str_options)`.  Numeric-valued params go into
 /// `uint_options`; all other params (e.g. `short_circuit_field`,
 /// `short_circuit_value`) go into `str_options`.
-fn parse_anchor(
-    anchor: &str,
-) -> (String, HashMap<String, u32>, HashMap<String, String>) {
+fn parse_anchor(anchor: &str) -> (String, HashMap<String, u32>, HashMap<String, String>) {
     let parts: Vec<&str> = anchor.split(',').collect();
     let key = parts[0].trim().to_lowercase();
     let mut uint_options: HashMap<String, u32> = HashMap::new();
@@ -103,8 +101,7 @@ fn load_sql_queries(
             // Store the current query under the last anchor
             if let Some(ref anchor) = current_anchor {
                 if !query_buffer.is_empty() {
-                    let (anchor_key, anchor_uint_opts, anchor_str_opts) =
-                        parse_anchor(anchor);
+                    let (anchor_key, anchor_uint_opts, anchor_str_opts) = parse_anchor(anchor);
                     queries.insert(
                         anchor_key.clone(),
                         query_buffer.join("\n").trim().to_string(),
@@ -126,8 +123,7 @@ fn load_sql_queries(
     // Store the last query
     if let Some(ref anchor) = current_anchor {
         if !query_buffer.is_empty() {
-            let (anchor_key, anchor_uint_opts, anchor_str_opts) =
-                parse_anchor(anchor);
+            let (anchor_key, anchor_uint_opts, anchor_str_opts) = parse_anchor(anchor);
             queries.insert(
                 anchor_key.clone(),
                 query_buffer.join("\n").trim().to_string(),
@@ -385,8 +381,7 @@ pub fn get_queries(
         process::exit(1);
     }
 
-    let (query_templates, query_uint_options, query_str_options) =
-        load_sql_queries(&template_path);
+    let (query_templates, query_uint_options, query_str_options) = load_sql_queries(&template_path);
 
     for (anchor, template) in &query_templates {
         // Fix backward compatibility for preflight and postdeploy.
@@ -398,14 +393,8 @@ pub fn get_queries(
             other => other.to_string(),
         };
 
-        let uint_opts = query_uint_options
-            .get(anchor)
-            .cloned()
-            .unwrap_or_default();
-        let str_opts = query_str_options
-            .get(anchor)
-            .cloned()
-            .unwrap_or_default();
+        let uint_opts = query_uint_options.get(anchor).cloned().unwrap_or_default();
+        let str_opts = query_str_options.get(anchor).cloned().unwrap_or_default();
 
         result.insert(
             normalized_anchor.clone(),
@@ -414,18 +403,10 @@ pub fn get_queries(
                 options: QueryOptions {
                     retries: *uint_opts.get("retries").unwrap_or(&1),
                     retry_delay: *uint_opts.get("retry_delay").unwrap_or(&0),
-                    postdelete_retries: *uint_opts
-                        .get("postdelete_retries")
-                        .unwrap_or(&10),
-                    postdelete_retry_delay: *uint_opts
-                        .get("postdelete_retry_delay")
-                        .unwrap_or(&5),
-                    short_circuit_field: str_opts
-                        .get("short_circuit_field")
-                        .cloned(),
-                    short_circuit_value: str_opts
-                        .get("short_circuit_value")
-                        .cloned(),
+                    postdelete_retries: *uint_opts.get("postdelete_retries").unwrap_or(&10),
+                    postdelete_retry_delay: *uint_opts.get("postdelete_retry_delay").unwrap_or(&5),
+                    short_circuit_field: str_opts.get("short_circuit_field").cloned(),
+                    short_circuit_value: str_opts.get("short_circuit_value").cloned(),
                 },
             },
         );
@@ -570,7 +551,10 @@ mod tests {
     fn test_preprocess_this_prefix_noop_when_no_this() {
         let template = "{{ fred }}";
         let result = preprocess_this_prefix(template, "resource_name_x").unwrap();
-        assert_eq!(result, template, "template without 'this.' should be unchanged");
+        assert_eq!(
+            result, template,
+            "template without 'this.' should be unchanged"
+        );
     }
 
     #[test]
@@ -625,10 +609,15 @@ mod tests {
         let engine = TemplateEngine::new();
         let mut context = std::collections::HashMap::new();
         context.insert("fred".to_string(), "global_fred".to_string());
-        context.insert("resource_name_x.fred".to_string(), "scoped_fred".to_string());
+        context.insert(
+            "resource_name_x.fred".to_string(),
+            "scoped_fred".to_string(),
+        );
 
         let expanded = preprocess_this_prefix("{{ this.fred }}", "resource_name_x").unwrap();
-        let result = engine.render_with_filters("t", &expanded, &context).unwrap();
+        let result = engine
+            .render_with_filters("t", &expanded, &context)
+            .unwrap();
         assert_eq!(
             result, "scoped_fred",
             "this.fred should resolve to the resource-scoped value, not the global"
@@ -640,10 +629,15 @@ mod tests {
         // No global 'fred' - only the resource-scoped one.
         let engine = TemplateEngine::new();
         let mut context = std::collections::HashMap::new();
-        context.insert("resource_name_x.fred".to_string(), "scoped_only".to_string());
+        context.insert(
+            "resource_name_x.fred".to_string(),
+            "scoped_only".to_string(),
+        );
 
         let expanded = preprocess_this_prefix("{{ this.fred }}", "resource_name_x").unwrap();
-        let result = engine.render_with_filters("t", &expanded, &context).unwrap();
+        let result = engine
+            .render_with_filters("t", &expanded, &context)
+            .unwrap();
         assert_eq!(result, "scoped_only");
     }
 
@@ -687,7 +681,9 @@ mod tests {
         )
         .unwrap();
 
-        let via_this = engine.render_with_filters("t1", &expanded, &context).unwrap();
+        let via_this = engine
+            .render_with_filters("t1", &expanded, &context)
+            .unwrap();
         let via_explicit = engine
             .render_with_filters(
                 "t2",
@@ -696,11 +692,7 @@ mod tests {
             )
             .unwrap();
         let via_shorthand = engine
-            .render_with_filters(
-                "t3",
-                "{{ callback.ProgressEvent.RequestToken }}",
-                &context,
-            )
+            .render_with_filters("t3", "{{ callback.ProgressEvent.RequestToken }}", &context)
             .unwrap();
 
         assert_eq!(via_this, "token-abc");
