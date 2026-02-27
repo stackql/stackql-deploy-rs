@@ -72,8 +72,8 @@ resources:
         merge:
           - global_tags
     exports:
-      - role_name: aws_iam_cross_account_role_name
-      - arn: aws_iam_cross_account_role_arn
+      - role_name
+      - arn
 
   - name: databricks_account_credentials
     file: databricks_account/credentials.iql
@@ -85,43 +85,47 @@ resources:
       - name: aws_credentials
         value:
           sts_role:
-            role_arn: "{{ aws_iam_cross_account_role_arn }}"
+            role_arn: "{{ aws_cross_account_role.arn }}"
     exports:
       - credentials_name
       - credentials_id
-      - databricks_role_external_id
+      - external_id
 
 # ====================================================================================
 # Storage
 # ====================================================================================
 
-  # - name: aws/s3/workspace_bucket
-  #   file: aws/s3/s3_bucket.iql
-  #   props:
-  #     - name: bucket_name
-  #       value: "{{ stack_name }}-{{ stack_env }}-root-bucket"
-  #     - name: ownership_controls
-  #       value:
-  #         Rules:
-  #           - ObjectOwnership: "BucketOwnerPreferred"
-  #     - name: bucket_encryption
-  #       value:
-  #         ServerSideEncryptionConfiguration:
-  #           - BucketKeyEnabled: true
-  #             ServerSideEncryptionByDefault:        
-  #               SSEAlgorithm: "AES256"
-  #     - name: public_access_block_configuration
-  #       value:
-  #         BlockPublicAcls: true
-  #         IgnorePublicAcls: true
-  #         BlockPublicPolicy: true
-  #         RestrictPublicBuckets: true
-  #     - name: versioning_configuration
-  #       value:
-  #         Status: "Suspended"
-  #   exports:
-  #     - arn: aws_s3_workspace_bucket_arn
-  #     - bucket_name: aws_s3_workspace_bucket_name
+  - name: aws_s3_workspace_bucket
+    file: aws/s3/buckets.iql
+    props:
+      - name: bucket_name
+        value: "{{ stack_name }}-{{ stack_env }}-root-bucket"
+      - name: ownership_controls
+        value:
+          Rules:
+            - ObjectOwnership: "BucketOwnerPreferred"
+      - name: bucket_encryption
+        value:
+          ServerSideEncryptionConfiguration:
+            - BucketKeyEnabled: true
+              ServerSideEncryptionByDefault:        
+                SSEAlgorithm: "AES256"
+      - name: public_access_block_configuration
+        value:
+          BlockPublicAcls: true
+          IgnorePublicAcls: true
+          BlockPublicPolicy: true
+          RestrictPublicBuckets: true
+      - name: versioning_configuration
+        value:
+          Status: "Suspended"
+      - name: tags
+        value: []
+        merge:
+          - global_tags
+    exports:
+      - bucket_name
+      - arn
 
   # - name: aws/s3/workspace_bucket_policy
   #   file: aws/s3/s3_bucket_policy.iql

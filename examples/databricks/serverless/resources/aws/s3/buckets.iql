@@ -1,0 +1,63 @@
+/*+ exists */
+SELECT count(*) as count
+FROM awscc.s3.buckets
+WHERE region = 'us-east-1' AND
+Identifier = '{{ bucket_name }}'
+;
+
+/*+ create */
+INSERT INTO awscc.s3.buckets (
+ BucketEncryption,
+ BucketName,
+ OwnershipControls,
+ PublicAccessBlockConfiguration,
+ Tags,
+ VersioningConfiguration,
+ region
+)
+SELECT
+ '{{ bucket_encryption }}',
+ '{{ bucket_name }}',
+ '{{ ownership_controls }}',
+ '{{ public_access_block_configuration }}',
+ '{{ tags }}',
+ '{{ versioning_configuration }}',
+ '{{ region }}';
+
+/*+ update */
+UPDATE awscc.s3.buckets
+SET PatchDocument = string('{{ {
+    "BucketEncryption": bucket_encryption,
+    "OwnershipControls": ownership_controls,
+    "PublicAccessBlockConfiguration": public_access_block_configuration,
+    "Tags": tags,
+    "VersioningConfiguration": versioning_configuration
+} | generate_patch_document }}')
+WHERE region = '{{ region }}'
+AND Identifier = '{{ bucket_name }}';
+
+/*+ statecheck, retries=3, retry_delay=2 */
+SELECT count(*) as count
+FROM awscc.s3.buckets
+WHERE 
+region = 'us-east-1' AND
+Identifier = '{{ bucket_name }}' AND
+BucketEncryption = '{{ bucket_encryption }}' AND
+OwnershipControls = '{{ ownership_controls }}' AND
+PublicAccessBlockConfiguration = '{{ public_access_block_configuration }}' AND
+Tags = '{{ tags }}' AND
+VersioningConfiguration = '{{ versioning_configuration }}'
+;
+
+/*+ exports */
+SELECT
+bucket_name,
+arn
+FROM awscc.s3.buckets
+WHERE region = 'us-east-1' AND
+Identifier = '{{ bucket_name }}';
+
+/*+ delete */
+DELETE FROM awscc.s3.buckets
+WHERE Identifier = '{{ bucket_name }}'
+AND region = 'us-east-1';
