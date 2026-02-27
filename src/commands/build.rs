@@ -361,7 +361,7 @@ fn run_build(
             let mut is_created_or_updated = false;
 
             if !resource_exists {
-                is_created_or_updated = runner.create_resource(
+                let (created, returning_row) = runner.create_resource(
                     resource,
                     create_query.as_ref().unwrap(),
                     create_retries,
@@ -370,10 +370,55 @@ fn run_build(
                     show_queries,
                     ignore_errors,
                 );
+                is_created_or_updated = created;
+
+                // Capture RETURNING * result.
+                if let Some(ref row) = returning_row {
+                    runner.store_callback_data(&resource.name, row);
+                }
+
+                // Run callback:create block if present.
+                if is_created_or_updated {
+                    let cb_anchor = if resource_queries.contains_key("callback:create") {
+                        Some("callback:create")
+                    } else if resource_queries.contains_key("callback") {
+                        Some("callback")
+                    } else {
+                        None
+                    };
+                    if let Some(anchor) = cb_anchor {
+                        // Pre-extract before the mutable borrow of runner.
+                        if let Some(q) = resource_queries.get(anchor) {
+                            let cb_template = q.template.clone();
+                            let cb_retries = q.options.retries;
+                            let cb_delay = q.options.retry_delay;
+                            let cb_sc_field = q.options.short_circuit_field.clone();
+                            let cb_sc_value = q.options.short_circuit_value.clone();
+                            let cb_ctx = runner.get_full_context(resource);
+                            let rendered_cb = runner.render_query(
+                                &resource.name,
+                                anchor,
+                                &cb_template,
+                                &cb_ctx,
+                            );
+                            runner.run_callback(
+                                resource,
+                                &rendered_cb,
+                                cb_retries,
+                                cb_delay,
+                                cb_sc_field.as_deref(),
+                                cb_sc_value.as_deref(),
+                                "create",
+                                dry_run,
+                                show_queries,
+                            );
+                        }
+                    }
+                }
             }
 
             if resource_exists && !is_correct_state {
-                is_created_or_updated = runner.update_resource(
+                let (updated, returning_row) = runner.update_resource(
                     resource,
                     update_query.as_deref(),
                     update_retries,
@@ -382,6 +427,50 @@ fn run_build(
                     show_queries,
                     ignore_errors,
                 );
+                is_created_or_updated = updated;
+
+                // Capture RETURNING * result.
+                if let Some(ref row) = returning_row {
+                    runner.store_callback_data(&resource.name, row);
+                }
+
+                // Run callback:update block if present.
+                if is_created_or_updated {
+                    let cb_anchor = if resource_queries.contains_key("callback:update") {
+                        Some("callback:update")
+                    } else if resource_queries.contains_key("callback") {
+                        Some("callback")
+                    } else {
+                        None
+                    };
+                    if let Some(anchor) = cb_anchor {
+                        if let Some(q) = resource_queries.get(anchor) {
+                            let cb_template = q.template.clone();
+                            let cb_retries = q.options.retries;
+                            let cb_delay = q.options.retry_delay;
+                            let cb_sc_field = q.options.short_circuit_field.clone();
+                            let cb_sc_value = q.options.short_circuit_value.clone();
+                            let cb_ctx = runner.get_full_context(resource);
+                            let rendered_cb = runner.render_query(
+                                &resource.name,
+                                anchor,
+                                &cb_template,
+                                &cb_ctx,
+                            );
+                            runner.run_callback(
+                                resource,
+                                &rendered_cb,
+                                cb_retries,
+                                cb_delay,
+                                cb_sc_field.as_deref(),
+                                cb_sc_value.as_deref(),
+                                "update",
+                                dry_run,
+                                show_queries,
+                            );
+                        }
+                    }
+                }
             }
 
             // Post-deploy state check

@@ -268,7 +268,7 @@ fn run_teardown(runner: &mut CommandRunner, dry_run: bool, show_queries: bool, _
 
         // Delete
         if resource_exists {
-            runner.delete_resource(
+            let returning_row = runner.delete_resource(
                 resource,
                 &delete_query,
                 delete_retries,
@@ -277,6 +277,43 @@ fn run_teardown(runner: &mut CommandRunner, dry_run: bool, show_queries: bool, _
                 show_queries,
                 ignore_errors,
             );
+
+            // Capture RETURNING * result.
+            if let Some(ref row) = returning_row {
+                runner.store_callback_data(&resource.name, row);
+            }
+
+            // Run callback:delete block if present.
+            let cb_anchor = if resource_queries.contains_key("callback:delete") {
+                Some("callback:delete")
+            } else if resource_queries.contains_key("callback") {
+                Some("callback")
+            } else {
+                None
+            };
+            if let Some(anchor) = cb_anchor {
+                if let Some(q) = resource_queries.get(anchor) {
+                    let cb_template = q.template.clone();
+                    let cb_retries = q.options.retries;
+                    let cb_delay = q.options.retry_delay;
+                    let cb_sc_field = q.options.short_circuit_field.clone();
+                    let cb_sc_value = q.options.short_circuit_value.clone();
+                    let cb_ctx = runner.get_full_context(resource);
+                    let rendered_cb =
+                        runner.render_query(&resource.name, anchor, &cb_template, &cb_ctx);
+                    runner.run_callback(
+                        resource,
+                        &rendered_cb,
+                        cb_retries,
+                        cb_delay,
+                        cb_sc_field.as_deref(),
+                        cb_sc_value.as_deref(),
+                        "delete",
+                        dry_run,
+                        show_queries,
+                    );
+                }
+            }
         } else {
             info!(
                 "resource [{}] does not exist, skipping delete",

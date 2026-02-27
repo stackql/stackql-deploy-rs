@@ -159,40 +159,68 @@ fn full_error_chain(err: &dyn StdError) -> String {
 
 /// Build a Tera context from a flat `HashMap<String, String>`.
 ///
-/// Keys that contain a `.` (e.g. `"resource_name.var"`) are grouped into
-/// nested objects so that Tera's property-access syntax works:
+/// Keys that contain `.` (e.g. `"resource_name.var"` or
+/// `"resource.callback.Field.SubField"`) are recursively expanded into
+/// nested JSON objects so that Tera's property-access syntax works at any
+/// depth:
 ///
 /// ```text
-/// context["my_vpc.vpc_id"] = "vpc-123"
+/// context["my_vpc.vpc_id"]                          = "vpc-123"
+/// context["res.callback.ProgressEvent.RequestToken"] = "abc"
 ///   ↓
-/// Tera context: { my_vpc: { vpc_id: "vpc-123" }, ... }
-///   → {{ my_vpc.vpc_id }} renders as "vpc-123"
+/// Tera context: {
+///   my_vpc: { vpc_id: "vpc-123" },
+///   res: { callback: { ProgressEvent: { RequestToken: "abc" } } }
+/// }
+///   → {{ my_vpc.vpc_id }}                          renders as "vpc-123"
+///   → {{ res.callback.ProgressEvent.RequestToken }} renders as "abc"
 /// ```
 ///
-/// Non-dotted keys are inserted as top-level strings as before.
+/// Non-dotted keys are inserted as top-level strings.
 fn build_tera_context(context: &HashMap<String, String>) -> TeraContext {
     let mut tera_context = TeraContext::new();
-
-    // Collect dotted keys grouped by prefix
-    let mut nested: HashMap<String, HashMap<String, String>> = HashMap::new();
+    let mut root: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
 
     for (key, value) in context {
-        if let Some((prefix, suffix)) = key.split_once('.') {
-            nested
-                .entry(prefix.to_string())
-                .or_default()
-                .insert(suffix.to_string(), value.clone());
-        } else {
-            tera_context.insert(key, value);
-        }
+        insert_nested_key(&mut root, key, value);
     }
 
-    // Insert each prefix group as a nested object
-    for (prefix, map) in &nested {
-        tera_context.insert(prefix, map);
+    for (key, val) in &root {
+        tera_context.insert(key, val);
     }
 
     tera_context
+}
+
+/// Recursively insert a dotted key into a JSON object tree.
+///
+/// `"a.b.c"` with value `"v"` produces `{ a: { b: { c: "v" } } }`.
+/// If an intermediate node already exists as a string (leaf), it is
+/// left unchanged and the deeper insertion is skipped to avoid
+/// overwriting with an object.
+fn insert_nested_key(
+    map: &mut serde_json::Map<String, serde_json::Value>,
+    key: &str,
+    value: &str,
+) {
+    match key.split_once('.') {
+        None => {
+            // Leaf – only write if the slot is not already a nested object.
+            // This prevents a dotted key from being overwritten by a later
+            // scalar with the same prefix.
+            map.entry(key.to_string())
+                .or_insert_with(|| serde_json::Value::String(value.to_string()));
+        }
+        Some((prefix, suffix)) => {
+            let entry = map
+                .entry(prefix.to_string())
+                .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+            if let serde_json::Value::Object(nested) = entry {
+                insert_nested_key(nested, suffix, value);
+            }
+            // If the entry is already a scalar, we cannot nest further – skip.
+        }
+    }
 }
 
 /// Register all custom Jinja2 filters matching the Python implementation.
@@ -509,5 +537,81 @@ mod tests {
             .render_with_filters("t", "{{ res.a }}-{{ res.b }}", &context)
             .unwrap();
         assert_eq!(result, "val_a-val_b");
+    }
+
+    #[test]
+    fn test_three_level_dotted_key() {
+        // Validates that callback.ProgressEvent.RequestToken style keys work.
+        let engine = TemplateEngine::new();
+        let mut context = HashMap::new();
+        context.insert(
+            "callback.ProgressEvent.RequestToken".to_string(),
+            "token-123".to_string(),
+        );
+        context.insert(
+            "callback.ProgressEvent.OperationStatus".to_string(),
+            "SUCCESS".to_string(),
+        );
+
+        let result = engine
+            .render_with_filters(
+                "t",
+                "{{ callback.ProgressEvent.RequestToken }}",
+                &context,
+            )
+            .unwrap();
+        assert_eq!(result, "token-123");
+
+        let result2 = engine
+            .render_with_filters(
+                "t2",
+                "{{ callback.ProgressEvent.OperationStatus }}",
+                &context,
+            )
+            .unwrap();
+        assert_eq!(result2, "SUCCESS");
+    }
+
+    #[test]
+    fn test_four_level_dotted_key_with_resource_prefix() {
+        // Validates resource-scoped callback access:
+        // {{ aws_s3_bucket.callback.ProgressEvent.RequestToken }}
+        let engine = TemplateEngine::new();
+        let mut context = HashMap::new();
+        context.insert(
+            "aws_s3_bucket.callback.ProgressEvent.RequestToken".to_string(),
+            "req-abc".to_string(),
+        );
+
+        let result = engine
+            .render_with_filters(
+                "t",
+                "{{ aws_s3_bucket.callback.ProgressEvent.RequestToken }}",
+                &context,
+            )
+            .unwrap();
+        assert_eq!(result, "req-abc");
+    }
+
+    #[test]
+    fn test_mixed_depth_keys_same_prefix() {
+        // A prefix can have both shallow and deep dotted children.
+        let engine = TemplateEngine::new();
+        let mut context = HashMap::new();
+        context.insert("res.export_var".to_string(), "exported".to_string());
+        context.insert(
+            "res.callback.Field.Sub".to_string(),
+            "deep_val".to_string(),
+        );
+
+        let result = engine
+            .render_with_filters("t", "{{ res.export_var }}", &context)
+            .unwrap();
+        assert_eq!(result, "exported");
+
+        let result2 = engine
+            .render_with_filters("t2", "{{ res.callback.Field.Sub }}", &context)
+            .unwrap();
+        assert_eq!(result2, "deep_val");
     }
 }

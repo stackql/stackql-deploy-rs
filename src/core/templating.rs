@@ -37,24 +37,42 @@ pub struct QueryOptions {
     pub retry_delay: u32,
     pub postdelete_retries: u32,
     pub postdelete_retry_delay: u32,
+    /// Dot-path into the RETURNING * result to check before polling
+    /// (e.g. `"ProgressEvent.OperationStatus"`).  Only used on `callback`
+    /// anchors.
+    pub short_circuit_field: Option<String>,
+    /// Value of `short_circuit_field` that means polling can be skipped.
+    /// Only used on `callback` anchors.
+    pub short_circuit_value: Option<String>,
 }
 
-/// Parse an anchor line to extract key and options.
-/// Matches Python's `parse_anchor`.
-fn parse_anchor(anchor: &str) -> (String, HashMap<String, u32>) {
+/// Parse an anchor line to extract key, numeric options, and string options.
+/// Matches Python's `parse_anchor`, extended for callback string params.
+///
+/// Returns `(key, uint_options, str_options)`.  Numeric-valued params go into
+/// `uint_options`; all other params (e.g. `short_circuit_field`,
+/// `short_circuit_value`) go into `str_options`.
+fn parse_anchor(
+    anchor: &str,
+) -> (String, HashMap<String, u32>, HashMap<String, String>) {
     let parts: Vec<&str> = anchor.split(',').collect();
     let key = parts[0].trim().to_lowercase();
-    let mut options = HashMap::new();
+    let mut uint_options: HashMap<String, u32> = HashMap::new();
+    let mut str_options: HashMap<String, String> = HashMap::new();
 
     for part in &parts[1..] {
         if let Some((option_key, option_value)) = part.split_once('=') {
-            if let Ok(value) = option_value.trim().parse::<u32>() {
-                options.insert(option_key.trim().to_string(), value);
+            let k = option_key.trim().to_string();
+            let v = option_value.trim().to_string();
+            if let Ok(uint_val) = v.parse::<u32>() {
+                uint_options.insert(k, uint_val);
+            } else {
+                str_options.insert(k, v);
             }
         }
     }
 
-    (key, options)
+    (key, uint_options, str_options)
 }
 
 /// Load SQL queries from a .iql file, split by anchors.
@@ -64,6 +82,7 @@ fn load_sql_queries(
 ) -> (
     HashMap<String, String>,
     HashMap<String, HashMap<String, u32>>,
+    HashMap<String, HashMap<String, String>>,
 ) {
     let content = match fs::read_to_string(file_path) {
         Ok(c) => c,
@@ -74,7 +93,8 @@ fn load_sql_queries(
     };
 
     let mut queries: HashMap<String, String> = HashMap::new();
-    let mut options: HashMap<String, HashMap<String, u32>> = HashMap::new();
+    let mut uint_options: HashMap<String, HashMap<String, u32>> = HashMap::new();
+    let mut str_options: HashMap<String, HashMap<String, String>> = HashMap::new();
     let mut current_anchor: Option<String> = None;
     let mut query_buffer: Vec<String> = Vec::new();
 
@@ -83,12 +103,14 @@ fn load_sql_queries(
             // Store the current query under the last anchor
             if let Some(ref anchor) = current_anchor {
                 if !query_buffer.is_empty() {
-                    let (anchor_key, anchor_options) = parse_anchor(anchor);
+                    let (anchor_key, anchor_uint_opts, anchor_str_opts) =
+                        parse_anchor(anchor);
                     queries.insert(
                         anchor_key.clone(),
                         query_buffer.join("\n").trim().to_string(),
                     );
-                    options.insert(anchor_key, anchor_options);
+                    uint_options.insert(anchor_key.clone(), anchor_uint_opts);
+                    str_options.insert(anchor_key, anchor_str_opts);
                     query_buffer.clear();
                 }
             }
@@ -104,16 +126,18 @@ fn load_sql_queries(
     // Store the last query
     if let Some(ref anchor) = current_anchor {
         if !query_buffer.is_empty() {
-            let (anchor_key, anchor_options) = parse_anchor(anchor);
+            let (anchor_key, anchor_uint_opts, anchor_str_opts) =
+                parse_anchor(anchor);
             queries.insert(
                 anchor_key.clone(),
                 query_buffer.join("\n").trim().to_string(),
             );
-            options.insert(anchor_key, anchor_options);
+            uint_options.insert(anchor_key.clone(), anchor_uint_opts);
+            str_options.insert(anchor_key, anchor_str_opts);
         }
     }
 
-    (queries, options)
+    (queries, uint_options, str_options)
 }
 
 /// Pre-process Jinja2 inline dict expressions that Tera doesn't support.
@@ -328,6 +352,10 @@ pub fn render_query(
 /// Templates are NOT rendered here — rendering is deferred to when
 /// each query is actually needed (JIT rendering).
 /// Matches Python's `get_queries`.
+///
+/// Callback anchors (e.g. `callback:create`, `callback:delete`) are stored
+/// under the key `"callback:create"`, `"callback:delete"`, etc.  A bare
+/// `callback` anchor (no operation qualifier) is stored under `"callback"`.
 pub fn get_queries(
     _engine: &TemplateEngine,
     stack_dir: &str,
@@ -349,27 +377,47 @@ pub fn get_queries(
         process::exit(1);
     }
 
-    let (query_templates, query_options) = load_sql_queries(&template_path);
+    let (query_templates, query_uint_options, query_str_options) =
+        load_sql_queries(&template_path);
 
     for (anchor, template) in &query_templates {
-        // Fix backward compatibility for preflight and postdeploy
+        // Fix backward compatibility for preflight and postdeploy.
+        // Callback anchors (callback:create, callback:delete, callback:update,
+        // callback) are passed through unchanged.
         let normalized_anchor = match anchor.as_str() {
             "preflight" => "exists".to_string(),
             "postdeploy" => "statecheck".to_string(),
             other => other.to_string(),
         };
 
-        let opts = query_options.get(anchor).cloned().unwrap_or_default();
+        let uint_opts = query_uint_options
+            .get(anchor)
+            .cloned()
+            .unwrap_or_default();
+        let str_opts = query_str_options
+            .get(anchor)
+            .cloned()
+            .unwrap_or_default();
 
         result.insert(
             normalized_anchor.clone(),
             ParsedQuery {
                 template: template.clone(),
                 options: QueryOptions {
-                    retries: *opts.get("retries").unwrap_or(&1),
-                    retry_delay: *opts.get("retry_delay").unwrap_or(&0),
-                    postdelete_retries: *opts.get("postdelete_retries").unwrap_or(&10),
-                    postdelete_retry_delay: *opts.get("postdelete_retry_delay").unwrap_or(&5),
+                    retries: *uint_opts.get("retries").unwrap_or(&1),
+                    retry_delay: *uint_opts.get("retry_delay").unwrap_or(&0),
+                    postdelete_retries: *uint_opts
+                        .get("postdelete_retries")
+                        .unwrap_or(&10),
+                    postdelete_retry_delay: *uint_opts
+                        .get("postdelete_retry_delay")
+                        .unwrap_or(&5),
+                    short_circuit_field: str_opts
+                        .get("short_circuit_field")
+                        .cloned(),
+                    short_circuit_value: str_opts
+                        .get("short_circuit_value")
+                        .cloned(),
                 },
             },
         );

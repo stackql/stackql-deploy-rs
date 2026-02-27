@@ -169,13 +169,86 @@ Useful functions for testing the desired state of a resource include [`JSON_EQUA
 
 ```sql
 /*+ exports */
-SELECT 
+SELECT
 '{{ vpc_name }}' as vpc_name,
 selfLink as vpc_link
 FROM google.compute.networks
 WHERE name = '{{ vpc_name }}'
 AND project = '{{ project }}'
 ```
+
+### `callback`
+
+`callback` blocks are optional polling queries that run **after** a `create`, `update`, or `delete` DML statement to track the outcome of a long-running asynchronous operation.  They are only used when the preceding DML statement includes a `RETURNING *` clause that returns a tracking handle from the provider.
+
+The canonical use-case is the AWS Cloud Control API (`awscc`), where every mutation returns a `ProgressEvent` object containing an `OperationStatus` and a `RequestToken` that must be polled until the operation completes.
+
+```sql
+/*+ callback:create, retries=10, retry_delay=15, short_circuit_field=ProgressEvent.OperationStatus, short_circuit_value=SUCCESS */
+SELECT OperationStatus = 'SUCCESS' as success
+FROM awscc.cloudcontrol.resource_request_statuses
+WHERE region = '{{ region }}'
+AND RequestToken = '{{ callback.ProgressEvent.RequestToken }}'
+```
+
+The operation qualifier (`:create`, `:update`, `:delete`) associates the callback with the matching DML anchor.  A plain `/*+ callback */` with no qualifier runs after **any** DML operation on the resource that used `RETURNING *`.
+
+#### Callback options
+
+| Option | Required | Default | Description |
+|---|---|---|---|
+| `retries` | no | 3 | Maximum number of poll attempts |
+| `retry_delay` | no | 5 | Seconds to wait between attempts |
+| `short_circuit_field` | no | — | Dot-path into the `RETURNING *` result checked before polling |
+| `short_circuit_value` | no | — | Value of `short_circuit_field` that means polling can be skipped |
+
+#### Success condition
+
+The callback query must return a column named **`success`** (or `count`).  The operation is considered complete when the query returns a row where `success` equals `1` or `true`.  If the query returns no rows, or the value is not truthy, the runner waits `retry_delay` seconds and retries.  If all retries are exhausted the run fails with a timeout error.
+
+#### RETURNING * capture and the `callback.*` namespace
+
+When a DML statement includes `RETURNING *` the first row of the provider response is automatically captured and stored in the template context:
+
+- **`callback.{field}`** — shorthand form, available within the current resource's own `.iql` file (overwritten by the next DML with `RETURNING *` on any resource).
+- **`{resource_name}.callback.{field}`** — fully-qualified form, available to any downstream resource for the rest of the stack run.
+
+For example, after a `create` on `aws_s3_workspace_bucket` that returns:
+
+```json
+{
+  "ProgressEvent": {
+    "OperationStatus": "SUCCESS",
+    "RequestToken": "a0088b9e-db47-4507-b93e-345b77979626"
+  }
+}
+```
+
+The following keys become available:
+
+```
+callback.ProgressEvent.OperationStatus          → SUCCESS
+callback.ProgressEvent.RequestToken             → a0088b9e-...
+aws_s3_workspace_bucket.callback.ProgressEvent.OperationStatus → SUCCESS
+aws_s3_workspace_bucket.callback.ProgressEvent.RequestToken    → a0088b9e-...
+```
+
+`RETURNING *` without a `callback` block is valid — the result is captured and no polling occurs.
+
+#### Short-circuit
+
+Some providers return the final operation status synchronously in the `RETURNING *` response.  When `short_circuit_field` and `short_circuit_value` are set, the runner checks the named field in the already-captured result **before** making any poll attempt.  If the value matches, the callback is skipped entirely.
+
+#### Scope boundaries
+
+- Callbacks only run during `build` and `teardown`.  The `test` command runs no DML and is unaffected.
+- In dry-run mode, neither the `RETURNING *` capture nor the callback query executes.  Intent is logged instead.
+
+#### Known limitations
+
+- There is no mechanism to short-circuit retries on a terminal failure state (e.g. `OperationStatus = 'FAILED'`).  The runner retries until success or exhaustion.
+- `RETURNING *` only captures the **first** row of the response.
+- The `callback.*` shorthand is implicitly scoped to the current resource's `.iql` file.  Use the fully-qualified `{resource_name}.callback.*` form in downstream resources.
 
 ## Query options
 
@@ -265,6 +338,68 @@ AND region = '{{ region }}'
 ```
 
 </File>
+
+### AWS Cloud Control API example with `callback`
+
+This example shows a `resource` file for an S3 bucket using the AWS Cloud Control API (`awscc`), which uses an asynchronous mutation model.  The `RETURNING *` clause captures the `ProgressEvent` tracking handle and the `callback:create` / `callback:delete` blocks poll until the operation completes.
+
+<File name='aws/s3/buckets.iql'>
+
+```sql
+/*+ exists */
+SELECT COUNT(*) as count
+FROM awscc.s3.buckets
+WHERE region = '{{ region }}'
+AND Identifier = '{{ bucket_name }}'
+
+/*+ create */
+INSERT INTO awscc.s3.buckets(BucketName, region)
+SELECT '{{ bucket_name }}', '{{ region }}'
+RETURNING *
+
+/*+ callback:create, retries=10, retry_delay=15, short_circuit_field=ProgressEvent.OperationStatus, short_circuit_value=SUCCESS */
+SELECT OperationStatus = 'SUCCESS' as success
+FROM awscc.cloudcontrol.resource_request_statuses
+WHERE region = '{{ region }}'
+AND RequestToken = '{{ callback.ProgressEvent.RequestToken }}'
+
+/*+ statecheck, retries=3, retry_delay=5 */
+SELECT COUNT(*) as count
+FROM awscc.s3.buckets
+WHERE region = '{{ region }}'
+AND Identifier = '{{ bucket_name }}'
+
+/*+ exports */
+SELECT '{{ bucket_name }}' as bucket_name
+
+/*+ delete */
+DELETE FROM awscc.s3.buckets
+WHERE region = '{{ region }}'
+AND Identifier = '{{ bucket_name }}'
+RETURNING *
+
+/*+ callback:delete, retries=10, retry_delay=15, short_circuit_field=ProgressEvent.OperationStatus, short_circuit_value=SUCCESS */
+SELECT OperationStatus = 'SUCCESS' as success
+FROM awscc.cloudcontrol.resource_request_statuses
+WHERE region = '{{ region }}'
+AND RequestToken = '{{ callback.ProgressEvent.RequestToken }}'
+```
+
+</File>
+
+The corresponding manifest entry requires **no** `callback` section — callback behaviour is configured entirely in the `.iql` file:
+
+```yaml
+  - name: aws_s3_workspace_bucket
+    file: aws/s3/buckets.iql
+    props:
+      - name: bucket_name
+        value: "{{ stack_name }}-{{ stack_env }}-root-bucket"
+      - name: region
+        value: "ap-southeast-2"
+    exports:
+      - bucket_name
+```
 
 ### `query` type example
 

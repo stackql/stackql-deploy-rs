@@ -606,6 +606,304 @@ pub fn run_ext_script(
     }
 }
 
+// ---------------------------------------------------------------------------
+// RETURNING * capture helpers
+// ---------------------------------------------------------------------------
+
+/// Return `true` if the rendered query string contains a `RETURNING` clause.
+/// Case-insensitive match; used to decide whether to capture a DML result.
+pub fn has_returning_clause(query: &str) -> bool {
+    query.to_uppercase().contains("RETURNING")
+}
+
+/// Execute a DML command (INSERT / UPDATE / DELETE), optionally capturing
+/// the `RETURNING *` result as the first row.
+///
+/// Returns `(command_message, Option<first_row>)`.  When the DML includes
+/// `RETURNING *` and the provider returns rows, the first row is captured.
+/// If no rows are returned (provider returned no body), `None` is returned –
+/// this is **not** an error.
+pub fn run_stackql_dml_returning(
+    command: &str,
+    client: &mut PgwireLite,
+    ignore_errors: bool,
+    retries: u32,
+    retry_delay: u32,
+) -> (String, Option<HashMap<String, String>>) {
+    let mut attempt = 0u32;
+
+    while attempt <= retries {
+        debug!(
+            "Executing stackql DML (attempt {}):\n\n{}\n",
+            attempt + 1,
+            command
+        );
+
+        match execute_query(command, client) {
+            Ok(result) => match result {
+                QueryResult::Data {
+                    columns,
+                    rows,
+                    notices,
+                } => {
+                    // Check for errors in notices before accepting the result.
+                    let mut error_noticed = false;
+                    for notice in &notices {
+                        if error_detected_in_notice(notice) && !ignore_errors {
+                            if attempt < retries {
+                                warn!(
+                                    "DML error in notice, retrying in {} seconds (attempt {} of {})...",
+                                    retry_delay, attempt + 1, retries + 1
+                                );
+                                thread::sleep(Duration::from_secs(retry_delay as u64));
+                                attempt += 1;
+                                error_noticed = true;
+                                break;
+                            } else {
+                                catch_error_and_exit(&format!(
+                                    "Error during stackql DML execution:\n\n{}\n",
+                                    notice
+                                ));
+                            }
+                        }
+                    }
+                    if error_noticed {
+                        continue;
+                    }
+
+                    // Capture RETURNING * first row (if any).
+                    let first_row = if !rows.is_empty() {
+                        let col_names: Vec<String> =
+                            columns.iter().map(|c| c.name.clone()).collect();
+                        let row = &rows[0];
+                        let mut map = HashMap::new();
+                        for (i, col_name) in col_names.iter().enumerate() {
+                            let value = row
+                                .values
+                                .get(i)
+                                .cloned()
+                                .unwrap_or_default();
+                            map.insert(col_name.clone(), value);
+                        }
+                        Some(map)
+                    } else {
+                        None
+                    };
+
+                    let msg = notices.join("\n");
+                    return (msg, first_row);
+                }
+                QueryResult::Command(msg) => {
+                    return (msg, None);
+                }
+                QueryResult::Empty => {
+                    return (String::new(), None);
+                }
+            },
+            Err(e) => {
+                if !ignore_errors {
+                    if attempt < retries {
+                        warn!(
+                            "DML failed, retrying in {} seconds (attempt {} of {})...",
+                            retry_delay,
+                            attempt + 1,
+                            retries + 1
+                        );
+                        thread::sleep(Duration::from_secs(retry_delay as u64));
+                        attempt += 1;
+                        continue;
+                    }
+                    catch_error_and_exit(&format!(
+                        "Exception during stackql DML execution:\n\n{}\n",
+                        e
+                    ));
+                } else {
+                    debug!("DML failed (ignored): {}", e);
+                    return (String::new(), None);
+                }
+            }
+        }
+
+        thread::sleep(Duration::from_secs(retry_delay as u64));
+        attempt += 1;
+    }
+
+    (String::new(), None)
+}
+
+/// Flatten a single RETURNING * row into dotted context keys and insert them
+/// into `context`.
+///
+/// For each column `col` in `row`:
+/// - `callback.{col}` is set (shorthand for the current resource's own `.iql`
+///   templates).
+/// - `{resource_name}.callback.{col}` is set (fully-qualified key accessible
+///   by downstream resources).
+///
+/// If a column value is a JSON object it is recursively expanded:
+/// `"ProgressEvent" = {"OperationStatus":"SUCCESS","RequestToken":"abc"}`
+/// produces:
+/// ```text
+/// callback.ProgressEvent.OperationStatus = SUCCESS
+/// callback.ProgressEvent.RequestToken    = abc
+/// ```
+pub fn flatten_returning_row(
+    row: &HashMap<String, String>,
+    resource_name: &str,
+    context: &mut HashMap<String, String>,
+) {
+    for (col, val) in row {
+        let short_prefix = format!("callback.{}", col);
+        let full_prefix = format!("{}.callback.{}", resource_name, col);
+        flatten_value_into_context(&short_prefix, &full_prefix, val, context);
+    }
+}
+
+/// Recursively expand a string value (possibly JSON) into dotted context keys.
+fn flatten_value_into_context(
+    short_prefix: &str,
+    full_prefix: &str,
+    value: &str,
+    context: &mut HashMap<String, String>,
+) {
+    if let Ok(json) = serde_json::from_str::<serde_json::Value>(value) {
+        if json.is_object() {
+            flatten_json_into_context(short_prefix, full_prefix, &json, context);
+            return;
+        }
+    }
+    context.insert(short_prefix.to_string(), value.to_string());
+    context.insert(full_prefix.to_string(), value.to_string());
+}
+
+fn flatten_json_into_context(
+    short_prefix: &str,
+    full_prefix: &str,
+    value: &serde_json::Value,
+    context: &mut HashMap<String, String>,
+) {
+    match value {
+        serde_json::Value::Object(map) => {
+            for (k, v) in map {
+                let new_short = format!("{}.{}", short_prefix, k);
+                let new_full = format!("{}.{}", full_prefix, k);
+                flatten_json_into_context(&new_short, &new_full, v, context);
+            }
+        }
+        serde_json::Value::String(s) => {
+            context.insert(short_prefix.to_string(), s.clone());
+            context.insert(full_prefix.to_string(), s.clone());
+        }
+        other => {
+            let s = other.to_string();
+            context.insert(short_prefix.to_string(), s.clone());
+            context.insert(full_prefix.to_string(), s);
+        }
+    }
+}
+
+/// Check whether a short-circuit condition is met using already-captured
+/// callback data.
+///
+/// `field` is a dot-path into the captured result (e.g.
+/// `"ProgressEvent.OperationStatus"`), looked up as `callback.{field}` in
+/// `context`.  Returns `true` if the value equals `expected_value`.
+/// Returns `false` (no short-circuit) if the field is absent.
+pub fn check_short_circuit(
+    context: &HashMap<String, String>,
+    field: &str,
+    expected_value: &str,
+) -> bool {
+    let lookup_key = format!("callback.{}", field);
+    match context.get(&lookup_key) {
+        Some(val) => {
+            let result = val == expected_value;
+            if result {
+                info!(
+                    "short-circuit condition met: {} = {} (skipping callback poll)",
+                    lookup_key, expected_value
+                );
+            }
+            result
+        }
+        None => {
+            debug!(
+                "short-circuit field '{}' not found in context, proceeding with callback poll",
+                lookup_key
+            );
+            false
+        }
+    }
+}
+
+/// Poll a callback query until the `success` (or `count`) column returns a
+/// truthy value, or `retries` are exhausted.
+///
+/// Returns `true` on success, `false` when retries are exhausted (the caller
+/// is responsible for treating exhaustion as an error).
+pub fn run_callback_poll(
+    resource_name: &str,
+    query: &str,
+    retries: u32,
+    retry_delay: u32,
+    client: &mut PgwireLite,
+) -> bool {
+    let mut attempt = 0u32;
+
+    while attempt <= retries {
+        debug!(
+            "Callback poll for [{}] attempt {}:\n\n{}\n",
+            resource_name,
+            attempt + 1,
+            query
+        );
+
+        let result = run_stackql_query(query, client, true, 0, 0);
+
+        if !result.is_empty() {
+            let row = &result[0];
+
+            // Check `success` column (primary).
+            if let Some(success_val) = row.get("success") {
+                if success_val == "1" || success_val.to_lowercase() == "true" {
+                    info!(
+                        "[{}] callback poll succeeded on attempt {}",
+                        resource_name,
+                        attempt + 1
+                    );
+                    return true;
+                }
+            }
+
+            // Check `count` column (alternative).
+            if let Some(count_val) = row.get("count") {
+                if count_val == "1" {
+                    info!(
+                        "[{}] callback poll succeeded (count=1) on attempt {}",
+                        resource_name,
+                        attempt + 1
+                    );
+                    return true;
+                }
+            }
+        }
+
+        if attempt < retries {
+            info!(
+                "[{}] callback poll attempt {}/{}: retrying in {} seconds...",
+                resource_name,
+                attempt + 1,
+                retries + 1,
+                retry_delay
+            );
+            thread::sleep(Duration::from_secs(retry_delay as u64));
+        }
+        attempt += 1;
+    }
+
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -697,5 +995,128 @@ mod tests {
             ctx.get("vault.secret_key").map(|s| s.as_str()),
             Some("super-secret"),
         );
+    }
+
+    // ------------------------------------------------------------------
+    // has_returning_clause
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_has_returning_clause_positive() {
+        assert!(has_returning_clause(
+            "INSERT INTO awscc.s3.buckets(BucketName, region) SELECT 'my-bucket', 'us-east-1' RETURNING *"
+        ));
+    }
+
+    #[test]
+    fn test_has_returning_clause_case_insensitive() {
+        assert!(has_returning_clause("DELETE FROM t WHERE id=1 returning *"));
+    }
+
+    #[test]
+    fn test_has_returning_clause_negative() {
+        assert!(!has_returning_clause(
+            "INSERT INTO t(col) SELECT 'val'"
+        ));
+    }
+
+    // ------------------------------------------------------------------
+    // flatten_returning_row
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_flatten_returning_row_simple_string_values() {
+        let mut row = HashMap::new();
+        row.insert("RequestToken".to_string(), "tok-123".to_string());
+        row.insert("OperationStatus".to_string(), "SUCCESS".to_string());
+
+        let mut ctx: HashMap<String, String> = HashMap::new();
+        flatten_returning_row(&row, "my_resource", &mut ctx);
+
+        assert_eq!(ctx.get("callback.RequestToken").map(|s| s.as_str()), Some("tok-123"));
+        assert_eq!(ctx.get("my_resource.callback.RequestToken").map(|s| s.as_str()), Some("tok-123"));
+        assert_eq!(ctx.get("callback.OperationStatus").map(|s| s.as_str()), Some("SUCCESS"));
+        assert_eq!(ctx.get("my_resource.callback.OperationStatus").map(|s| s.as_str()), Some("SUCCESS"));
+    }
+
+    #[test]
+    fn test_flatten_returning_row_nested_json() {
+        // Provider returns ProgressEvent as a JSON object string.
+        let mut row = HashMap::new();
+        row.insert(
+            "ProgressEvent".to_string(),
+            r#"{"OperationStatus":"SUCCESS","RequestToken":"abc"}"#.to_string(),
+        );
+
+        let mut ctx: HashMap<String, String> = HashMap::new();
+        flatten_returning_row(&row, "aws_s3_bucket", &mut ctx);
+
+        assert_eq!(
+            ctx.get("callback.ProgressEvent.OperationStatus").map(|s| s.as_str()),
+            Some("SUCCESS")
+        );
+        assert_eq!(
+            ctx.get("callback.ProgressEvent.RequestToken").map(|s| s.as_str()),
+            Some("abc")
+        );
+        assert_eq!(
+            ctx.get("aws_s3_bucket.callback.ProgressEvent.OperationStatus").map(|s| s.as_str()),
+            Some("SUCCESS")
+        );
+        assert_eq!(
+            ctx.get("aws_s3_bucket.callback.ProgressEvent.RequestToken").map(|s| s.as_str()),
+            Some("abc")
+        );
+    }
+
+    #[test]
+    fn test_flatten_returning_row_empty_row_is_noop() {
+        let row: HashMap<String, String> = HashMap::new();
+        let mut ctx: HashMap<String, String> = HashMap::new();
+        flatten_returning_row(&row, "res", &mut ctx);
+        assert!(ctx.is_empty());
+    }
+
+    // ------------------------------------------------------------------
+    // check_short_circuit
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_check_short_circuit_matches() {
+        let mut ctx: HashMap<String, String> = HashMap::new();
+        ctx.insert(
+            "callback.ProgressEvent.OperationStatus".to_string(),
+            "SUCCESS".to_string(),
+        );
+        assert!(check_short_circuit(
+            &ctx,
+            "ProgressEvent.OperationStatus",
+            "SUCCESS"
+        ));
+    }
+
+    #[test]
+    fn test_check_short_circuit_no_match() {
+        let mut ctx: HashMap<String, String> = HashMap::new();
+        ctx.insert(
+            "callback.ProgressEvent.OperationStatus".to_string(),
+            "IN_PROGRESS".to_string(),
+        );
+        assert!(!check_short_circuit(
+            &ctx,
+            "ProgressEvent.OperationStatus",
+            "SUCCESS"
+        ));
+    }
+
+    #[test]
+    fn test_check_short_circuit_missing_field() {
+        let ctx: HashMap<String, String> = HashMap::new();
+        // Field not present in context → no short-circuit.
+        assert!(!check_short_circuit(
+            &ctx,
+            "ProgressEvent.OperationStatus",
+            "SUCCESS"
+        ));
     }
 }
