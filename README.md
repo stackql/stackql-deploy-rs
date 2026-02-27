@@ -69,3 +69,6 @@ examples/databricks/serverless dev \
 -e DATABRICKS_ACCOUNT_ID=${DATABRICKS_ACCOUNT_ID} \
 -e DATABRICKS_AWS_ACCOUNT_ID=${DATABRICKS_AWS_ACCOUNT_ID} \
 --dry-run
+
+pgrep -f "stackql srv"
+kill $(pgrep -f "stackql srv")

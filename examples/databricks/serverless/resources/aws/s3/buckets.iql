@@ -42,12 +42,13 @@ FROM awscc.s3.buckets
 WHERE 
 region = 'us-east-1' AND
 Identifier = '{{ bucket_name }}' AND
-BucketEncryption = '{{ bucket_encryption }}' AND
-OwnershipControls = '{{ ownership_controls }}' AND
-PublicAccessBlockConfiguration = '{{ public_access_block_configuration }}' AND
-Tags = '{{ tags }}' AND
-VersioningConfiguration = '{{ versioning_configuration }}'
+JSON_EQUAL(bucket_encryption, '{{ bucket_encryption }}') AND
+JSON_EQUAL(ownership_controls, '{{ ownership_controls }}') AND
+JSON_EQUAL(public_access_block_configuration, '{{ public_access_block_configuration }}') AND
+JSON_EQUAL(tags, '{{ tags }}') AND
+JSON_EQUAL(versioning_configuration, '{{ versioning_configuration }}')
 ;
+
 
 /*+ exports */
 SELECT
