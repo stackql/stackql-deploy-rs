@@ -36,10 +36,7 @@ use std::process::{Command as ProcessCommand, Stdio};
 use std::thread;
 use std::time::Duration;
 
-// use clap::error;
 use log::{error, info, warn};
-
-// use colored::*;
 
 use crate::app::{DEFAULT_LOG_FILE, LOCAL_SERVER_ADDRESSES};
 use crate::globals::{server_host, server_port};

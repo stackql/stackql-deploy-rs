@@ -69,5 +69,3 @@ examples/databricks/serverless dev \
 -e DATABRICKS_ACCOUNT_ID=${DATABRICKS_ACCOUNT_ID} \
 -e DATABRICKS_AWS_ACCOUNT_ID=${DATABRICKS_AWS_ACCOUNT_ID} \
 --dry-run
-
-C:\LocalGitRepos\stackql\stackql-deploy-rs\examples\databricks\serverless\stackql_manifest.yml

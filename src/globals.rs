@@ -119,21 +119,3 @@ pub fn server_port() -> u16 {
         .unwrap_or(DEFAULT_SERVER_PORT)
 }
 
-/// Retrieves the configured global connection string.
-///
-/// The connection string is generated during initialization via `init_globals`.
-/// If not initialized, it returns an empty string.
-///
-/// # Returns
-/// - `&'static str` - The configured connection string or an empty string if not initialized.
-///
-/// # Example
-/// ```rust
-/// use crate::globals::{init_globals, connection_string};
-/// init_globals("localhost".to_string(), 5444);
-/// println!("Connection String: {}", connection_string());
-/// ```
-#[allow(dead_code)]
-pub fn connection_string() -> &'static str {
-    STACKQL_CONNECTION_STRING.get().map_or("", |s| s.as_str())
-}

@@ -6,11 +6,7 @@
 //! including Unicode-styled message boxes and color-coded output for errors, success messages, and informational messages.
 //! It leverages the `colored` crate for styling and `unicode_width` crate for handling Unicode text width.
 
-use log::debug;
 use unicode_width::UnicodeWidthStr;
-
-use crate::commands::common_args::CommonCommandArgs;
-use clap::ArgMatches;
 
 /// Border color options for Unicode boxes, matching Python's BorderColor enum.
 #[derive(Debug, Clone, Copy)]
@@ -95,23 +91,3 @@ macro_rules! print_success {
     }};
 }
 
-/// Log common command arguments at debug level
-#[allow(dead_code)]
-pub fn log_common_command_args(args: &CommonCommandArgs, matches: &ArgMatches) {
-    debug!("Stack Directory: {}", args.stack_dir);
-    debug!("Stack Environment: {}", args.stack_env);
-    debug!("Log Level: {}", args.log_level);
-    debug!("Environment File: {}", args.env_file);
-
-    // Log environment variables if present
-    if let Some(vars) = matches.get_many::<String>("env") {
-        debug!("Environment Variables:");
-        for var in vars {
-            debug!("  - {}", var);
-        }
-    }
-
-    debug!("Dry Run: {}", args.dry_run);
-    debug!("Show Queries: {}", args.show_queries);
-    debug!("On Failure: {:?}", args.on_failure);
-}

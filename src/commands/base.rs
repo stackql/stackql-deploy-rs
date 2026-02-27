@@ -14,7 +14,7 @@ use log::{debug, error, info};
 use pgwire_lite::PgwireLite;
 
 use crate::core::config::{
-    get_full_context, get_resource_type, render_globals, render_string_value,
+    get_full_context, render_globals, render_string_value,
 };
 use crate::core::env::load_env_vars;
 use crate::core::templating::{self, ParsedQuery};
@@ -24,7 +24,6 @@ use crate::core::utils::{
 };
 use crate::resource::manifest::{Manifest, Resource};
 use crate::template::engine::TemplateEngine;
-// display imports available for future use
 
 /// Core state for all command operations, equivalent to Python's StackQLBase.
 pub struct CommandRunner {
@@ -83,12 +82,6 @@ impl CommandRunner {
             resource,
             &self.stack_env,
         )
-    }
-
-    /// Get resource type string, validated.
-    #[allow(dead_code)]
-    pub fn get_resource_type(&self, resource: &Resource) -> String {
-        get_resource_type(resource).to_string()
     }
 
     /// Evaluate a resource's `if` condition. Returns true if the resource should be processed.
@@ -812,22 +805,3 @@ fn evaluate_simple_condition(condition: &str) -> Option<bool> {
     None
 }
 
-/// Helper to get export names as strings from YAML values.
-#[allow(dead_code)]
-pub fn get_export_names(exports: &[serde_yaml::Value]) -> Vec<String> {
-    exports
-        .iter()
-        .filter_map(|e| {
-            if let Some(s) = e.as_str() {
-                Some(s.to_string())
-            } else if let Some(map) = e.as_mapping() {
-                // For dict exports, get the value (the lookup key)
-                map.values()
-                    .next()
-                    .and_then(|v| v.as_str().map(|s| s.to_string()))
-            } else {
-                None
-            }
-        })
-        .collect()
-}

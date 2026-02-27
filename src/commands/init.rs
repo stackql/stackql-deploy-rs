@@ -40,14 +40,6 @@ enum TemplateSource {
 }
 
 impl TemplateSource {
-    #[allow(dead_code)]
-    fn provider_or_path(&self) -> &str {
-        match self {
-            TemplateSource::Embedded(provider) => provider,
-            TemplateSource::Custom(path) => path,
-        }
-    }
-
     fn get_sample_res_name(&self) -> &str {
         match self {
             TemplateSource::Embedded(provider) => match provider.as_str() {

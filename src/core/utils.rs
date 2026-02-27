@@ -486,15 +486,15 @@ pub fn export_vars(
 
         // --- resource-scoped key (immutable: only written if not already set) ---
         let scoped_key = format!("{}.{}", resource_name, key);
-        if !global_context.contains_key(&scoped_key) {
+        global_context.entry(scoped_key.clone()).or_insert_with(|| {
             info!(
                 "set {} [{}] to [{}] in exports",
                 if is_protected { "protected variable" } else { "variable" },
                 scoped_key,
                 display_value,
             );
-            global_context.insert(scoped_key, value.clone());
-        }
+            value.clone()
+        });
 
         // --- global (unscoped) key (can be overridden by later resources) ---
         info!(
