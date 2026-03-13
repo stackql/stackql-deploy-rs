@@ -1,0 +1,13 @@
+{
+  "Sid": "ManagedFileEventsListStatement",
+  "Effect": "Allow",
+  "Action": [
+    "sqs:ListQueues",
+    "sqs:ListQueueTags",
+    "sns:ListTopics"
+  ],
+  "Resource": [
+    "arn:aws:sqs:*:*:csms-*",
+    "arn:aws:sns:*:*:csms-*"
+  ]
+}

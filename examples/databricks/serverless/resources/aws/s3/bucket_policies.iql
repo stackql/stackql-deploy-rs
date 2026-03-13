@@ -1,0 +1,44 @@
+/*+ exists */
+SELECT count(*) as count
+FROM awscc.s3.bucket_policies
+WHERE region = '{{ region }}' AND
+Identifier = '{{ bucket_name }}'
+;
+
+/*+ create */
+INSERT INTO awscc.s3.bucket_policies (
+  Bucket,
+  PolicyDocument,
+  region
+)
+SELECT
+  '{{ bucket_name }}',
+  '{{ policy_document }}',
+  '{{ region }}';
+
+/*+ update */
+UPDATE awscc.s3.bucket_policies
+SET PatchDocument = string('{{ {
+    "PolicyDocument": policy_document
+} | generate_patch_document }}')
+WHERE
+  region = '{{ region }}' AND
+  Identifier = '{{ bucket_name }}';
+
+/*+ statecheck, retries=5, retry_delay=10 */
+SELECT 
+count(*) as count
+FROM (
+    SELECT 
+        AWS_POLICY_EQUAL(policy_document, '{{ policy_document }}') as test_policy_document
+    FROM awscc.s3.bucket_policies 
+    WHERE region = '{{ region }}' 
+    AND Identifier = '{{ bucket_name }}'
+)t
+WHERE test_policy_document = 1;
+
+/*+ delete */
+DELETE FROM awscc.s3.bucket_policies
+WHERE
+  Identifier = '{{ bucket_name }}' AND
+  region = '{{ region }}';

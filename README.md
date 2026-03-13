@@ -68,6 +68,8 @@ examples/databricks/serverless dev \
 -e AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID} \
 -e DATABRICKS_ACCOUNT_ID=${DATABRICKS_ACCOUNT_ID} \
 -e DATABRICKS_AWS_ACCOUNT_ID=${DATABRICKS_AWS_ACCOUNT_ID} \
+--show-queries \
+--log-level debug \
 --dry-run
 
 pgrep -f "stackql srv"

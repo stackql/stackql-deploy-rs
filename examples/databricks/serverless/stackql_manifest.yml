@@ -57,8 +57,8 @@ resources:
         value:
           - PolicyDocument:
               Statement:
-                - file(aws/iam/policy_statements/ec2_permissions.json)
-                - file(aws/iam/policy_statements/iam_service_linked_role.json)
+                - file(aws/iam/policy_statements/cross_account_role/ec2_permissions.json)
+                - file(aws/iam/policy_statements/cross_account_role/iam_service_linked_role.json)
               Version: '2012-10-17'
             PolicyName: "{{ stack_name }}-{{ stack_env }}-policy"
       - name: managed_policy_arns
@@ -127,211 +127,163 @@ resources:
       - bucket_name
       - arn
 
-  # - name: aws/s3/workspace_bucket_policy
-  #   file: aws/s3/s3_bucket_policy.iql
-  #   props:
-  #     - name: policy_document
-  #       value:
-  #         Version: "2012-10-17"
-  #         Statement:
-  #           - Sid: Grant Databricks Access
-  #             Effect: Allow
-  #             Principal:
-  #               AWS: "arn:aws:iam::{{ databricks_aws_account_id }}:root"
-  #             Action:
-  #               - "s3:GetObject"
-  #               - "s3:GetObjectVersion"
-  #               - "s3:PutObject"
-  #               - "s3:DeleteObject"
-  #               - "s3:ListBucket"
-  #               - "s3:GetBucketLocation"
-  #             Resource:
-  #               - "{{ aws_s3_workspace_bucket_arn }}/*"
-  #               - "{{ aws_s3_workspace_bucket_arn }}"
+  - name: aws_s3_workspace_bucket_policy
+    file: aws/s3/bucket_policies.iql
+    props:
+      - name: bucket_name
+        value: "{{ aws_s3_workspace_bucket.bucket_name }}"
+      - name: policy_document
+        value:
+          Version: "2012-10-17"
+          Statement:
+            - Sid: Grant Databricks Access
+              Effect: Allow
+              Principal:
+                AWS: "arn:aws:iam::{{ databricks_aws_account_id }}:root"
+              Action:
+                - "s3:GetObject"
+                - "s3:GetObjectVersion"
+                - "s3:PutObject"
+                - "s3:DeleteObject"
+                - "s3:ListBucket"
+                - "s3:GetBucketLocation"
+              Resource:
+                - "{{ aws_s3_workspace_bucket.arn }}/*"
+                - "{{ aws_s3_workspace_bucket.arn }}"
 
-  # - name: databricks_account/storage_configuration
-  #   props:
-  #   - name: storage_configuration_name
-  #     value: "{{ stack_name }}-{{ stack_env }}-storage"
-  #   - name: root_bucket_info
-  #     value:
-  #       bucket_name: "{{ aws_s3_workspace_bucket_name }}"
-  #   exports:
-  #     - databricks_storage_configuration_id
+  - name: databricks_storage_configuration
+    file: databricks_account/storage.iql
+    props:
+    - name: account_id
+      value: "{{ databricks_account_id }}"
+    - name: storage_configuration_name
+      value: "{{ stack_name }}-{{ stack_env }}-storage"
+    - name: root_bucket_info
+      value:
+        bucket_name: "{{ aws_s3_workspace_bucket.bucket_name }}"
+    exports:
+      - storage_configuration_id
 
 # ====================================================================================
 # UC Storage Credential and Metastore Catalog Bucket 
 # ====================================================================================
 
-  # - name: aws/s3/metastore_bucket
-  #   file: aws/s3/s3_bucket.iql
-  #   props:
-  #     - name: bucket_name
-  #       value: "{{ stack_name }}-{{ stack_env }}-metastore"
-  #     - name: ownership_controls
-  #       value:
-  #         Rules:
-  #           - ObjectOwnership: "BucketOwnerPreferred"
-  #     - name: bucket_encryption
-  #       value:
-  #         ServerSideEncryptionConfiguration:
-  #           - BucketKeyEnabled: true
-  #             ServerSideEncryptionByDefault:        
-  #               SSEAlgorithm: "AES256"
-  #     - name: public_access_block_configuration
-  #       value:
-  #         BlockPublicAcls: true
-  #         IgnorePublicAcls: true
-  #         BlockPublicPolicy: true
-  #         RestrictPublicBuckets: true
-  #     - name: versioning_configuration
-  #       value:
-  #         Status: "Suspended"
-  #   exports:
-  #     - arn: aws_s3_metastore_bucket_arn
-  #     - bucket_name: aws_s3_metastore_bucket_name
+  - name: aws_s3_metastore_bucket
+    file: aws/s3/buckets.iql
+    props:
+      - name: bucket_name
+        value: "{{ stack_name }}-{{ stack_env }}-metastore"
+      - name: ownership_controls
+        value:
+          Rules:
+            - ObjectOwnership: "BucketOwnerPreferred"
+      - name: bucket_encryption
+        value:
+          ServerSideEncryptionConfiguration:
+            - BucketKeyEnabled: true
+              ServerSideEncryptionByDefault:        
+                SSEAlgorithm: "AES256"
+      - name: public_access_block_configuration
+        value:
+          BlockPublicAcls: true
+          IgnorePublicAcls: true
+          BlockPublicPolicy: true
+          RestrictPublicBuckets: true
+      - name: versioning_configuration
+        value:
+          Status: "Suspended"
+      - name: tags
+        value: []
+        merge:
+          - global_tags          
+    exports:
+      - arn
+      - bucket_name
 
-  # - name: aws/iam/metastore_access_role
-  #   file: aws/iam/iam_role.iql
-  #   props:
-  #     - name: role_name
-  #       value: "{{ stack_name }}-{{ stack_env }}-metastore-role"
-  #     - name: assume_role_policy_document
-  #       value:
-  #         Version: "2012-10-17"
-  #         Statement:
-  #           - Effect: "Allow"
-  #             Principal:
-  #               AWS: 
-  #                 - "arn:aws:iam::414351767826:role/unity-catalog-prod-UCMasterRole-14S5ZJVKOTYTL"
-  #             Action: "sts:AssumeRole"
-  #             Condition:
-  #               StringEquals:
-  #                 sts:ExternalId: "0000"  # Placeholder
-  #     - name: description
-  #       value: 'Unity Catalog metastore access role for ({{ stack_name }}-{{ stack_env }})'
-  #     - name: path
-  #       value: '/'
-  #     - name: policies
-  #       value:
-  #         - PolicyName: "MetastoreS3Policy"
-  #           PolicyDocument:
-  #             Version: "2012-10-17"
-  #             Statement:
-  #               - Effect: "Allow"
-  #                 Action:
-  #                   - "s3:GetObject"
-  #                   - "s3:PutObject"
-  #                   - "s3:DeleteObject"
-  #                   - "s3:ListBucket"
-  #                   - "s3:GetBucketLocation"
-  #                   - "s3:ListBucketMultipartUploads"
-  #                   - "s3:ListMultipartUploadParts"
-  #                   - "s3:AbortMultipartUpload"
-  #                 Resource:
-  #                   - "{{ aws_s3_metastore_bucket_arn }}/*"
-  #                   - "{{ aws_s3_metastore_bucket_arn }}"
-
-  #               # - Effect: "Allow"
-  #               #   Action:
-  #               #     - "kms:Decrypt"
-  #               #     - "kms:Encrypt"
-  #               #     - "kms:GenerateDataKey*"
-  #               #   Resource:
-  #               #     - "arn:aws:kms:<KMS-KEY>"
-
-  #               - Effect: "Allow"
-  #                 Action:
-  #                   - "sts:AssumeRole"
-  #                 Resource:
-  #                   - "arn:aws:iam::{{ databricks_aws_account_id }}:role/{{ stack_name }}-{{ stack_env }}-metastore-role"
-
-  #               - Sid: "ManagedFileEventsSetupStatement"
-  #                 Effect: "Allow"
-  #                 Action:
-  #                   - "s3:GetBucketNotification"
-  #                   - "s3:PutBucketNotification"
-  #                   - "sns:ListSubscriptionsByTopic"
-  #                   - "sns:GetTopicAttributes"
-  #                   - "sns:SetTopicAttributes"
-  #                   - "sns:CreateTopic"
-  #                   - "sns:TagResource"
-  #                   - "sns:Publish"
-  #                   - "sns:Subscribe"
-  #                   - "sqs:CreateQueue"
-  #                   - "sqs:DeleteMessage"
-  #                   - "sqs:ReceiveMessage"
-  #                   - "sqs:SendMessage"
-  #                   - "sqs:GetQueueUrl"
-  #                   - "sqs:GetQueueAttributes"
-  #                   - "sqs:SetQueueAttributes"
-  #                   - "sqs:TagQueue"
-  #                   - "sqs:ChangeMessageVisibility"
-  #                   - "sqs:PurgeQueue"
-  #                 Resource:
-  #                   - "{{ aws_s3_metastore_bucket_arn }}"
-  #                   - "arn:aws:sqs:*:*:csms-*"
-  #                   - "arn:aws:sns:*:*:csms-*"
-
-  #               - Sid: "ManagedFileEventsListStatement"
-  #                 Effect: "Allow"
-  #                 Action:
-  #                   - "sqs:ListQueues"
-  #                   - "sqs:ListQueueTags"
-  #                   - "sns:ListTopics"
-  #                 Resource:
-  #                   - "arn:aws:sqs:*:*:csms-*"
-  #                   - "arn:aws:sns:*:*:csms-*"
-
-  #               - Sid: "ManagedFileEventsTeardownStatement"
-  #                 Effect: "Allow"
-  #                 Action:
-  #                   - "sns:Unsubscribe"
-  #                   - "sns:DeleteTopic"
-  #                   - "sqs:DeleteQueue"
-  #                 Resource:
-  #                   - "arn:aws:sqs:*:*:csms-*"
-  #                   - "arn:aws:sns:*:*:csms-*"
-  #     - name: tags
-  #       value:
-  #         - Key: Purpose
-  #           Value: "Unity Catalog Storage Credential"
-  #       merge:
-  #         - global_tags
-  #   skip_validation: true
-  #   exports:
-  #     - aws_iam_role_arn: metastore_access_role_arn
+  - name: aws_metastore_access_role
+    file: aws/iam/roles.iql
+    props:
+      - name: role_name
+        value: "{{ stack_name }}-{{ stack_env }}-metastore-role"
+      - name: assume_role_policy_document
+        value:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: "Allow"
+              Principal:
+                AWS: 
+                  - "arn:aws:iam::414351767826:role/unity-catalog-prod-UCMasterRole-14S5ZJVKOTYTL"
+              Action: "sts:AssumeRole"
+              Condition:
+                StringEquals:
+                  sts:ExternalId: "0000"  # Placeholder
+      - name: description
+        value: 'Unity Catalog metastore access role for ({{ stack_name }}-{{ stack_env }})'
+      - name: path
+        value: '/'
+      - name: policies
+        value:
+          - PolicyName: "MetastoreS3Policy"
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - file(aws/iam/policy_statements/metastore_access_role/s3_access.json)
+                # - file(aws/iam/policy_statements/metastore_access_role/kms_decrypt.json)
+                - file(aws/iam/policy_statements/metastore_access_role/sts_assume_role.json)
+                - file(aws/iam/policy_statements/metastore_access_role/managed_file_events_setup.json)
+                - file(aws/iam/policy_statements/metastore_access_role/managed_file_events_list.json)
+                - file(aws/iam/policy_statements/metastore_access_role/managed_file_events_teardown.json)
+      - name: managed_policy_arns
+        value: []
+      - name: max_session_duration
+        value: 3600
+      - name: permissions_boundary
+        value: ""
+      - name: tags
+        value:
+          - Key: Purpose
+            Value: "Unity Catalog Storage Credential"
+        merge:
+          - global_tags
+    skip_validation: true
+    exports:
+      - role_name
+      - arn
 
 # ====================================================================================
 # DBX Workspace
 # ====================================================================================
 
-  # - name: databricks_account/workspace
-  #   props:
-  #   - name: workspace_name
-  #     value: "{{ stack_name }}-{{ stack_env }}-workspace"
-  #   - name: aws_region
-  #     value: "{{ region }}"
-  #   - name: credentials_id
-  #     value: "{{ databricks_credentials_id }}"
-  #   - name: storage_configuration_id
-  #     value: "{{ databricks_storage_configuration_id }}"
-  #   - name: pricing_tier
-  #     value: PREMIUM
-  #   exports:
-  #     - databricks_workspace_name
-  #     - databricks_workspace_id
-  #     - databricks_deployment_name
-  #     - databricks_workspace_status
-  #     - databricks_workspace_url
+  - name: databricks_workspace
+    file: databricks_account/workspaces.iql
+    props:
+    - name: account_id
+      value: "{{ databricks_account_id }}"
+    - name: aws_region
+      value: "{{ region }}"
+    - name: pricing_tier
+      value: PREMIUM
+    - name: credentials_id
+      value: "{{ databricks_account_credentials.credentials_id }}"
+    - name: storage_configuration_id
+      value: "{{ databricks_storage_configuration.storage_configuration_id }}"
+    - name: workspace_name
+      value: "{{ stack_name }}-{{ stack_env }}-workspace"
+    exports:
+      - workspace_name
+      - workspace_id
+      - deployment_name
+      - workspace_status
+      - workspace_url
 
-  # - name: databricks_account/workspace_group
-  #   props:
-  #   - name: display_name
-  #     value: "{{ stack_name }}-{{ stack_env }}-workspace-admins"
-  #   exports:
-  #     - databricks_group_id
-  #     - databricks_group_name
+  - name: workspace_admins_group
+    file: databricks_account/account_groups.iql
+    props:
+    - name: display_name
+      value: "{{ stack_name }}-{{ stack_env }}-workspace-admins"
+    exports:
+      - id
+      - display_name
 
   # - name: databricks_account/get_users
   #   type: query

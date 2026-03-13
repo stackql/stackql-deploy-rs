@@ -1,7 +1,7 @@
 /*+ exists */
 SELECT count(*) as count
 FROM awscc.s3.buckets
-WHERE region = 'us-east-1' AND
+WHERE region = '{{ region }}' AND
 Identifier = '{{ bucket_name }}'
 ;
 
@@ -36,29 +36,30 @@ SET PatchDocument = string('{{ {
 WHERE region = '{{ region }}'
 AND Identifier = '{{ bucket_name }}';
 
-/*+ statecheck, retries=3, retry_delay=2 */
-SELECT count(*) as count
-FROM awscc.s3.buckets
-WHERE 
-region = 'us-east-1' AND
-Identifier = '{{ bucket_name }}' AND
-JSON_EQUAL(bucket_encryption, '{{ bucket_encryption }}') AND
-JSON_EQUAL(ownership_controls, '{{ ownership_controls }}') AND
-JSON_EQUAL(public_access_block_configuration, '{{ public_access_block_configuration }}') AND
-JSON_EQUAL(tags, '{{ tags }}') AND
-JSON_EQUAL(versioning_configuration, '{{ versioning_configuration }}')
-;
-
-
-/*+ exports */
-SELECT
-bucket_name,
-arn
-FROM awscc.s3.buckets
-WHERE region = 'us-east-1' AND
-Identifier = '{{ bucket_name }}';
+/*+ exports, retries=3, retry_delay=5 */
+SELECT 
+arn,
+bucket_name
+FROM (
+    SELECT 
+        arn,
+        bucket_name,
+        JSON_EQUAL(ownership_controls, '{{ ownership_controls }}') as test_ownership_controls,
+        JSON_EQUAL(bucket_encryption, '{{ bucket_encryption }}') as test_bucket_encryption,
+        JSON_EQUAL(public_access_block_configuration, '{{ public_access_block_configuration }}') as test_public_access_block_configuration,
+        JSON_EQUAL(versioning_configuration, '{{ versioning_configuration }}') as test_versioning_configuration,
+        AWS_POLICY_EQUAL(tags, '{{ tags }}') as test_tags
+    FROM awscc.s3.buckets 
+    WHERE region = '{{ region }}' 
+    AND Identifier = '{{ bucket_name }}'
+)t
+WHERE test_ownership_controls = 1
+AND test_bucket_encryption = 1
+AND test_public_access_block_configuration = 1
+AND test_versioning_configuration = 1
+AND test_tags = 1;
 
 /*+ delete */
 DELETE FROM awscc.s3.buckets
 WHERE Identifier = '{{ bucket_name }}'
-AND region = 'us-east-1';
+AND region = '{{ region }}';

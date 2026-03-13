@@ -1,0 +1,13 @@
+{
+  "Sid": "ManagedFileEventsTeardownStatement",
+  "Effect": "Allow",
+  "Action": [
+    "sns:Unsubscribe",
+    "sns:DeleteTopic",
+    "sqs:DeleteQueue"
+  ],
+  "Resource": [
+    "arn:aws:sqs:*:*:csms-*",
+    "arn:aws:sns:*:*:csms-*"
+  ]
+}

@@ -1,0 +1,30 @@
+/*+ exists */
+SELECT count(*) as count
+FROM databricks_account.provisioning.storage
+WHERE account_id = '{{ account_id }}'
+AND storage_configuration_name = '{{ storage_configuration_name }}'
+;
+
+/*+ create */
+INSERT INTO databricks_account.provisioning.storage (
+storage_configuration_name,
+root_bucket_info,
+account_id
+)
+SELECT 
+'{{ storage_configuration_name }}',
+'{{ root_bucket_info }}',
+'{{ account_id }}';
+
+/*+ exports, retries=5, retry_delay=10 */
+SELECT storage_configuration_id
+FROM databricks_account.provisioning.storage
+WHERE account_id = '{{ account_id }}'
+AND storage_configuration_name = '{{ storage_configuration_name }}'
+AND JSON_EXTRACT(root_bucket_info, '$.bucket_name') = '{{ root_bucket_info | from_json | get(key="bucket_name") }}';
+
+/*+ delete */
+DELETE FROM databricks_account.provisioning.storage
+WHERE account_id = '{{ account_id }}'
+AND storage_configuration_id = '{{ storage_configuration_id }}'
+;
