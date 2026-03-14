@@ -79,7 +79,7 @@ jobs:
             use-cross: false
 
           - target: x86_64-apple-darwin
-            os: macos-13
+            os: macos-latest
             artifact-name: stackql-deploy-macos-x86_64
             archive: tar.gz
             use-cross: false
