@@ -57,7 +57,7 @@ fn main() {
             Arg::new("server")
                 .long("server")
                 .alias("host")
-                .short('h')
+                .short('H')
                 .help("StackQL server host to connect to")
                 .global(true)
                 .default_value(DEFAULT_SERVER_HOST)

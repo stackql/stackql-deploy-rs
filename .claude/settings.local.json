@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo build:*)",
+      "Bash(cargo check:*)",
+      "Bash(where clang:*)",
+      "Read(//c/Program Files/LLVM/bin/**)",
+      "Bash(echo \"LIBCLANG_PATH=$LIBCLANG_PATH\")",
+      "Read(//c/Program Files/**)",
+      "Bash(winget list:*)",
+      "Bash(cargo tree:*)",
+      "Bash(where llvm-config:*)",
+      "Read(//c/msys64/mingw64/bin/**)",
+      "Read(//c/msys64/clang64/bin/**)"
+    ]
+  }
+}

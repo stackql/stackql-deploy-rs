@@ -95,17 +95,17 @@ pub fn execute() {
         }
     }
 
-    // Display contributors if available
-    let raw_contributors = option_env!("CONTRIBUTORS").unwrap_or("");
+    // Display contributors from embedded contributors.csv
+    let raw_contributors = include_str!("../../contributors.csv");
     let contributors: Vec<&str> = raw_contributors
-        .split(',')
+        .lines()
         .filter(|s| !s.trim().is_empty())
         .collect();
 
     if !contributors.is_empty() {
-        println!("\n{}", "Special thanks to:".green().bold());
+        println!("\n{}", "Special Thanks to our Contributors".green().bold());
 
-        for chunk in contributors.chunks(5) {
+        for chunk in contributors.chunks(4) {
             println!("  {}", chunk.join(", "));
         }
     }

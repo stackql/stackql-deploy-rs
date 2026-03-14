@@ -1,0 +1,9 @@
+{
+  "Effect": "Allow",
+  "Action": [
+    "sts:AssumeRole"
+  ],
+  "Resource": [
+    "arn:aws:iam::{{ databricks_aws_account_id }}:role/{{ stack_name }}-{{ stack_env }}-metastore-role"
+  ]
+}
