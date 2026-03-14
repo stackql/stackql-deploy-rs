@@ -11,7 +11,7 @@ use std::path::Path;
 use std::process;
 
 use log::{debug, error, info};
-use pgwire_lite::PgwireLite;
+use crate::utils::pgwire::PgwireLite;
 
 use crate::core::config::{get_full_context, render_globals, render_string_value};
 use crate::core::env::load_env_vars;

@@ -12,7 +12,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use log::{debug, error, info, warn};
-use pgwire_lite::PgwireLite;
+use crate::utils::pgwire::PgwireLite;
 
 use crate::utils::query::{execute_query, QueryResult};
 

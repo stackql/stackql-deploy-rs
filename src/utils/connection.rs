@@ -21,9 +21,9 @@
 use std::process;
 
 use colored::*;
-use pgwire_lite::PgwireLite;
 
 use crate::globals::{server_host, server_port};
+use crate::utils::pgwire::PgwireLite;
 
 /// Creates a new PgwireLite client connection
 pub fn create_client() -> PgwireLite {
@@ -38,7 +38,7 @@ pub fn create_client() -> PgwireLite {
     });
 
     println!("Connected to stackql server at {}:{}", host, port);
-    println!("Using libpq version: {}", client.libpq_version());
+    println!("Using pgwire client: {}", client.libpq_version());
 
     client
 }

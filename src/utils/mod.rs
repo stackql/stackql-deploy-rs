@@ -3,6 +3,7 @@ pub mod connection;
 pub mod display;
 pub mod download;
 pub mod logging;
+pub mod pgwire;
 pub mod platform;
 pub mod query;
 pub mod server;

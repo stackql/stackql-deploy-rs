@@ -26,7 +26,7 @@
 //! }
 //! ```
 
-use pgwire_lite::{PgwireLite, Value};
+use crate::utils::pgwire::{PgwireLite, Value};
 
 /// Represents a column in a query result.
 pub struct QueryResultColumn {
