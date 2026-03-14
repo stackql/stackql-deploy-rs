@@ -1,0 +1,137 @@
+name: Release Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'build.rs'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/release-build.yml'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Fetch contributor list via StackQL and upload as a workflow artifact so all
+  # matrix build jobs can embed it into the binary at compile time.
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Fetch contributors
+        id: get-contributors
+        uses: stackql/stackql-exec@v2.2.3
+        with:
+          query_file_path: ci-scripts/get-contributors.iql
+          query_output: csv
+
+      - name: Save contributors CSV
+        run: echo "${{ steps.get-contributors.outputs.stackql-query-results }}" > contributors.csv
+
+      - name: Upload contributors artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: contributors-csv
+          path: contributors.csv
+
+  build:
+    name: Build (${{ matrix.target }})
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact-name: stackql-deploy-linux-x86_64
+            archive: tar.gz
+            use-cross: false
+
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact-name: stackql-deploy-linux-arm64
+            archive: tar.gz
+            use-cross: true
+
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            artifact-name: stackql-deploy-windows-x86_64
+            archive: zip
+            use-cross: false
+
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            artifact-name: stackql-deploy-macos-arm64
+            archive: tar.gz
+            use-cross: false
+
+          - target: x86_64-apple-darwin
+            os: macos-13
+            artifact-name: stackql-deploy-macos-x86_64
+            archive: tar.gz
+            use-cross: false
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Download contributors CSV
+        uses: actions/download-artifact@v4
+        with:
+          name: contributors-csv
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install cross
+        if: matrix.use-cross == true
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build (cross)
+        if: matrix.use-cross == true
+        run: cross build --release --target ${{ matrix.target }}
+
+      - name: Build (native)
+        if: matrix.use-cross == false
+        run: cargo build --release --target ${{ matrix.target }}
+
+      # Strip Linux and macOS binaries to reduce size.
+      # Cross-compiled ARM64 Linux is stripped by cross automatically.
+      - name: Strip binary (native Linux / macOS)
+        if: matrix.os != 'windows-latest' && matrix.use-cross == false
+        run: strip target/${{ matrix.target }}/release/stackql-deploy
+
+      - name: Package (tar.gz)
+        if: matrix.archive == 'tar.gz'
+        run: |
+          tar -czf ${{ matrix.artifact-name }}.tar.gz \
+            -C target/${{ matrix.target }}/release stackql-deploy
+
+      - name: Package (zip) — Windows
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          Compress-Archive `
+            -Path target/${{ matrix.target }}/release/stackql-deploy.exe `
+            -DestinationPath ${{ matrix.artifact-name }}.zip
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.artifact-name }}.*
+          if-no-files-found: error

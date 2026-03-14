@@ -1,2 +1,0 @@
-/*+ exports */
-SELECT 'http://' || '{{ public_dns_name }}' as web_server_url

@@ -1,76 +1,110 @@
-# Basic build (debug mode)
-cargo build
+# stackql-deploy
 
-# Release build (optimized with no debug info)
-cargo build --release
+[![Crates.io](https://img.shields.io/crates/v/stackql-deploy.svg)](https://crates.io/crates/stackql-deploy)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-# Build with verbose output
-cargo build -v
+**stackql-deploy** is an infrastructure-as-code framework for declarative cloud resource management using [StackQL](https://stackql.io). Define your cloud resources once using StackQL queries and YAML manifests, then `build`, `test`, and `teardown` across any environment.
 
-# Check if your code compiles without producing an executable
-cargo check
+> This is the Rust rewrite (v2.x). The original Python package (`stackql-deploy` on PyPI, v1.x) is archived — see the [Python package changelog](https://github.com/stackql/stackql-deploy/blob/main/CHANGELOG.md) for prior release history.
 
-# Build and run the application
-cargo run
+---
 
-# Build and run with command line arguments
-cargo run -- build --env prod --provider aws --region us-east-1
+## Install
 
-./target/release/stackql-deploy --version
+### Via `cargo`
 
-./target/release/stackql-deploy --help
+```sh
+cargo install stackql-deploy
+```
 
-./target/release/stackql-deploy info
+### Direct binary download
 
-./target/release/stackql-deploy init my-stack --provider aws
+Pre-built binaries for Linux (x86_64 / ARM64), macOS (Apple Silicon / Intel), and Windows (x86_64) are available on the [GitHub Releases](https://github.com/stackql/stackql-deploy/releases) page.
 
-./target/release/stackql-deploy build my-stack dev
+**Linux / macOS:**
 
-./target/release/stackql-deploy test my-stack dev
+```sh
+# Replace <version> and <target> as appropriate, e.g. 2.0.0 and linux-x86_64
+curl -L https://github.com/stackql/stackql-deploy/releases/download/v<version>/stackql-deploy-<target>.tar.gz | tar xz
+chmod +x stackql-deploy
+sudo mv stackql-deploy /usr/local/bin/
+```
 
-./target/release/stackql-deploy test examples/aws/aws-stack dev
+**Windows:**
 
-./target/release/stackql-deploy teardown my-stack dev
+Download the `.zip` from the releases page and add the extracted binary to your `PATH`.
 
-./target/release/stackql-deploy build
+---
 
-./target/release/stackql-deploy unknowncmd
+## Quick start
 
-./target/release/stackql-deploy shell
+### 1. Initialise a new project
 
-./target/release/stackql-deploy upgrade
+```sh
+# Using a built-in provider template
+stackql-deploy init my-stack --provider aws
 
-./target/release/stackql-deploy start-server
+# Using a template from the template hub
+stackql-deploy init my-stack --template google/starter
+```
 
-# Using built-in provider template
-./target/release/stackql-deploy init my-project --provider aws
+### 2. Build (deploy) your stack
 
-# Using relative path to template in GitHub
-./target/release/stackql-deploy init my-project --template google/starter
+```sh
+stackql-deploy build my-stack dev
+```
 
-# Using full GitHub URL
-./target/release/stackql-deploy init my-project --template https://github.com/stackql/stackql-deploy-rust/tree/main/template-hub/azure/starter
+### 3. Test your stack
 
-./target/release/stackql-deploy init my-project --template https://raw.githubusercontent.com/stackql/stackql-deploy-rust/main/template-hub/azure/starter
+```sh
+stackql-deploy test my-stack dev
+```
 
-./target/release/stackql-deploy init my-project --template https://raw.githubusercontent.com/stackql/stackql-deploy-rust/main/template-hub/azure/fred
+### 4. Tear down your stack
 
+```sh
+stackql-deploy teardown my-stack dev
+```
 
-#### test
+### Other commands
 
-git fetch origin && git merge origin/main
+```sh
+# Show version / provider info
+stackql-deploy info
 
-cargo build --release
+# Interactive StackQL shell
+stackql-deploy shell
 
-./target/release/stackql-deploy build \
-examples/databricks/serverless dev \
--e AWS_REGION=${AWS_REGION} \
--e AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID} \
--e DATABRICKS_ACCOUNT_ID=${DATABRICKS_ACCOUNT_ID} \
--e DATABRICKS_AWS_ACCOUNT_ID=${DATABRICKS_AWS_ACCOUNT_ID} \
---show-queries \
---log-level debug \
---dry-run
+# Update the embedded StackQL binary
+stackql-deploy upgrade
 
-pgrep -f "stackql srv"
-kill $(pgrep -f "stackql srv")
+# Preview what build would do (no changes applied)
+stackql-deploy build my-stack dev --dry-run
+```
+
+---
+
+## Project structure
+
+A `stackql-deploy` project consists of a manifest file and one or more StackQL query files:
+
+```
+my-stack/
+├── stackql_manifest.yml   # Declares resources, providers, and environment config
+└── resources/
+    └── my_bucket.iql      # StackQL queries for create/exists/state checks
+```
+
+See the [documentation site](https://stackql.io/docs/stackql-deploy) for the full manifest reference and query file format.
+
+---
+
+## Supported providers
+
+stackql-deploy works with any provider supported by StackQL, including AWS, Google Cloud, Azure, Databricks, Snowflake, and more. See [registry.stackql.io](https://registry.stackql.io) for the full provider list.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE) for details.

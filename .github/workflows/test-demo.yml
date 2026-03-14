@@ -23,7 +23,7 @@ jobs:
           echo "🚀 Testing Demos (placeholder)"
           echo "This is a placeholder step - actual implementation pending"    
       # - name: Checkout repository
-      #   uses: actions/checkout@v4
+      #   uses: actions/checkout@v6
       
       # - name: Install Rust toolchain
       #   uses: dtolnay/rust-toolchain@stable
