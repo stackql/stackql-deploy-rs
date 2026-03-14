@@ -1,110 +1,183 @@
-# stackql-deploy
+<div align="center">
 
-[![Crates.io](https://img.shields.io/crates/v/stackql-deploy.svg)](https://crates.io/crates/stackql-deploy)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![stackql-deploy logo](https://stackql.io/img/stackql-deploy-logo.png)](https://github.com/stackql/stackql)
 
-**stackql-deploy** is an infrastructure-as-code framework for declarative cloud resource management using [StackQL](https://stackql.io). Define your cloud resources once using StackQL queries and YAML manifests, then `build`, `test`, and `teardown` across any environment.
+**Model-driven resource provisioning and deployment framework using StackQL.**
 
-> This is the Rust rewrite (v2.x). The original Python package (`stackql-deploy` on PyPI, v1.x) is archived — see the [Python package changelog](https://github.com/stackql/stackql-deploy/blob/main/CHANGELOG.md) for prior release history.
+[![Crates.io](https://img.shields.io/crates/v/stackql-deploy)](https://crates.io/crates/stackql-deploy)
+[![Crates.io Downloads](https://img.shields.io/crates/d/stackql-deploy)](https://crates.io/crates/stackql-deploy)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20windows-brightgreen)](https://github.com/stackql/stackql-deploy/releases)
+[![Docs](https://img.shields.io/badge/docs-stackql--deploy.io-brightgreen)](https://stackql-deploy.io/docs)
+
+</div>
 
 ---
 
+**stackql-deploy** is a multi-cloud Infrastructure-as-Code framework inspired by [dbt](https://www.getdbt.com/), built on top of [StackQL](https://github.com/stackql/stackql). Define cloud resources as SQL-like models, then `build`, `test`, and `teardown` across any environment — no state files required.
+
+> This is the Rust rewrite (v2.x). The original Python package (v1.x, last release 1.9.4) is now archived — see its [changelog](https://github.com/stackql/stackql-deploy/blob/main/CHANGELOG.md) for prior history.
+
 ## Install
 
-### Via `cargo`
-
+**Via `cargo`:**
 ```sh
 cargo install stackql-deploy
 ```
 
-### Direct binary download
+**Direct binary download** (Linux, macOS, Windows — x86\_64 and ARM64):
 
-Pre-built binaries for Linux (x86_64 / ARM64), macOS (Apple Silicon / Intel), and Windows (x86_64) are available on the [GitHub Releases](https://github.com/stackql/stackql-deploy/releases) page.
+Download the latest release from the [GitHub Releases](https://github.com/stackql/stackql-deploy/releases) page, extract, and place the binary on your `PATH`.
 
-**Linux / macOS:**
+## How it works
 
-```sh
-# Replace <version> and <target> as appropriate, e.g. 2.0.0 and linux-x86_64
-curl -L https://github.com/stackql/stackql-deploy/releases/download/v<version>/stackql-deploy-<target>.tar.gz | tar xz
-chmod +x stackql-deploy
-sudo mv stackql-deploy /usr/local/bin/
-```
-
-**Windows:**
-
-Download the `.zip` from the releases page and add the extracted binary to your `PATH`.
-
----
-
-## Quick start
-
-### 1. Initialise a new project
-
-```sh
-# Using a built-in provider template
-stackql-deploy init my-stack --provider aws
-
-# Using a template from the template hub
-stackql-deploy init my-stack --template google/starter
-```
-
-### 2. Build (deploy) your stack
-
-```sh
-stackql-deploy build my-stack dev
-```
-
-### 3. Test your stack
-
-```sh
-stackql-deploy test my-stack dev
-```
-
-### 4. Tear down your stack
-
-```sh
-stackql-deploy teardown my-stack dev
-```
-
-### Other commands
-
-```sh
-# Show version / provider info
-stackql-deploy info
-
-# Interactive StackQL shell
-stackql-deploy shell
-
-# Update the embedded StackQL binary
-stackql-deploy upgrade
-
-# Preview what build would do (no changes applied)
-stackql-deploy build my-stack dev --dry-run
-```
-
----
-
-## Project structure
-
-A `stackql-deploy` project consists of a manifest file and one or more StackQL query files:
+A `stackql-deploy` project is a directory with a manifest and StackQL query files:
 
 ```
-my-stack/
-├── stackql_manifest.yml   # Declares resources, providers, and environment config
+example_stack/
+├── stackql_manifest.yml
 └── resources/
-    └── my_bucket.iql      # StackQL queries for create/exists/state checks
+    └── monitor_resource_group.iql
 ```
 
-See the [documentation site](https://stackql.io/docs/stackql-deploy) for the full manifest reference and query file format.
+The manifest declares providers, global variables, and resources:
 
----
+```yaml
+version: 1
+name: example_stack
+description: activity monitor stack
+providers:
+  - azure
+globals:
+  - name: subscription_id
+    value: "{{ vars.AZURE_SUBSCRIPTION_ID }}"
+  - name: location
+    value: eastus
+resources:
+  - name: monitor_resource_group
+    description: azure resource group
+    props:
+      - name: resource_group_name
+        value: "activity-monitor-{{ globals.stack_env }}"
+```
 
-## Supported providers
+> Use `stackql-deploy init example_stack --provider azure` to scaffold a new project.
 
-stackql-deploy works with any provider supported by StackQL, including AWS, Google Cloud, Azure, Databricks, Snowflake, and more. See [registry.stackql.io](https://registry.stackql.io) for the full provider list.
+Resource `.iql` files define mutation and check queries using SQL anchors:
 
----
+```sql
+/*+ create */
+INSERT INTO azure.resources.resource_groups(
+  resourceGroupName, subscriptionId, data__location
+)
+SELECT '{{ resource_group_name }}', '{{ subscription_id }}', '{{ location }}'
+
+/*+ update */
+UPDATE azure.resources.resource_groups
+SET data__location = '{{ location }}'
+WHERE resourceGroupName = '{{ resource_group_name }}'
+  AND subscriptionId = '{{ subscription_id }}'
+
+/*+ delete */
+DELETE FROM azure.resources.resource_groups
+WHERE resourceGroupName = '{{ resource_group_name }}'
+  AND subscriptionId = '{{ subscription_id }}'
+
+/*+ exists */
+SELECT COUNT(*) as count FROM azure.resources.resource_groups
+WHERE subscriptionId = '{{ subscription_id }}'
+  AND resourceGroupName = '{{ resource_group_name }}'
+
+/*+ statecheck, retries=5, retry_delay=5 */
+SELECT COUNT(*) as count FROM azure.resources.resource_groups
+WHERE subscriptionId = '{{ subscription_id }}'
+  AND resourceGroupName = '{{ resource_group_name }}'
+  AND location = '{{ location }}'
+  AND JSON_EXTRACT(properties, '$.provisioningState') = 'Succeeded'
+
+/*+ exports */
+SELECT resourceGroupName, location
+FROM azure.resources.resource_groups
+WHERE subscriptionId = '{{ subscription_id }}'
+  AND resourceGroupName = '{{ resource_group_name }}'
+```
+
+### Query execution strategy
+
+For each resource, `stackql-deploy` selects an execution path based on which anchors are defined in the `.iql` file:
+
+```mermaid
+graph TB
+    A[resource] --> B{has\ncreateorupdate?}
+    B -- Yes --> C[run createorupdate\nskip all checks]
+    B -- No --> D{has statecheck?}
+
+    D -- Yes --> E[exists check]
+    E --> F{exists?}
+    F -- No --> G[create]
+    F -- Yes --> H[statecheck]
+    H --> I{correct\nstate?}
+    I -- Yes --> J[✅ up to date]
+    I -- No --> K[update]
+    G & K --> L[post-deploy exports]
+
+    D -- No --> M{has exports?}
+    M -- Yes --> N[⚡ try exports first]
+    N --> O{returned\ndata?}
+    O -- Yes --> P[✅ validated +\nexports captured\nin 1 query]
+    O -- No --> Q[exists check]
+    Q --> R{exists?}
+    R -- No --> S[create]
+    R -- Yes --> S2[update]
+    S & S2 --> T[exports]
+    M -- No --> U[exists check\ncreate or update]
+```
+
+**Tip:** when there is no `statecheck`, an `exports` query that selects from the live resource serves as both a validation and data-extraction step in a single API call.
+
+## Usage
+
+```sh
+# Preview what would change (no mutations)
+stackql-deploy build example_stack dev --dry-run
+
+# Deploy
+stackql-deploy build example_stack dev -e AZURE_SUBSCRIPTION_ID=00000000-0000-0000-0000-000000000000
+
+# Run checks only
+stackql-deploy test example_stack dev
+
+# Deprovision (reverse order)
+stackql-deploy teardown example_stack dev
+```
+
+Common flags:
+
+| Flag | Description |
+|---|---|
+| `--dry-run` | Print queries, make no changes |
+| `--on-failure=rollback` | `rollback`, `ignore`, or `error` (default) |
+| `--env-file=.env` | Load environment variables from a file |
+| `-e KEY=value` | Pass individual environment variables |
+| `--log-level` | `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` |
+| `--show-queries` | Print rendered SQL before execution |
+
+Show environment and provider info:
+
+```sh
+stackql-deploy info
+```
+
+Full command reference:
+
+```sh
+stackql-deploy --help
+```
+
+## Documentation
+
+Full documentation — manifest reference, query anchors, template filters, provider examples — is at **[stackql-deploy.io/docs](https://stackql-deploy.io/docs)**.
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+MIT — see [LICENSE](LICENSE).

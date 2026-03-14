@@ -12,6 +12,11 @@ keywords = ["stackql", "infrastructure", "iac", "cloud", "devops"]
 categories = ["command-line-utilities", "development-tools"]
 readme = "README.md"
 
+# docs.rs: this is a binary-only crate — no public library API to document.
+# The README (above) is what crates.io renders on the package page.
+[package.metadata.docs.rs]
+no-default-features = true
+
 [dependencies]
 clap = { version = "4.3", features = ["derive"] }
 colored = "2.0"
