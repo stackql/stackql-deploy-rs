@@ -584,10 +584,7 @@ mod tests {
         // Unscoped form is available
         assert_eq!(ctx.get("idempotency_token").unwrap(), token);
         // Scoped form is available (for `this.idempotency_token` and downstream access)
-        assert_eq!(
-            ctx.get("my_resource.idempotency_token").unwrap(),
-            token
-        );
+        assert_eq!(ctx.get("my_resource.idempotency_token").unwrap(), token);
     }
 
     #[test]
@@ -632,10 +629,7 @@ mod tests {
 
         let resource = make_resource(
             "my_res",
-            vec![make_prop(
-                "client_token",
-                "{{ idempotency_token }}",
-            )],
+            vec![make_prop("client_token", "{{ idempotency_token }}")],
         );
 
         let ctx = get_full_context(&engine, &global_context, &resource, "dev", Some(token));

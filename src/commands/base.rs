@@ -103,7 +103,10 @@ impl CommandRunner {
 
     /// Get the full context for a resource (global + resource properties).
     pub fn get_full_context(&self, resource: &Resource) -> HashMap<String, String> {
-        let token = self.idempotency_tokens.get(&resource.name).map(|s| s.as_str());
+        let token = self
+            .idempotency_tokens
+            .get(&resource.name)
+            .map(|s| s.as_str());
         get_full_context(
             &self.engine,
             &self.global_context,
