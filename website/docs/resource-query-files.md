@@ -279,9 +279,50 @@ AND project = '{{ project }}'
 AND zone = '{{ zone }}'
 ```
 
+## Special Variables
+
+In addition to the properties defined in the manifest, StackQL Deploy injects a set of built-in variables into every template context automatically.
+
+| Variable | Scope | Description |
+|---|---|---|
+| `stack_name` | Global | Name of the stack as declared in the manifest |
+| `stack_env` | Global | Environment name supplied to the CLI (`dev`, `prd`, etc.) |
+| `resource_name` | Per-resource | Name of the resource currently being processed |
+| `idempotency_token` | Per-resource | Stable UUID v4 for this resource for the lifetime of the session |
+| `this.idempotency_token` | Per-resource (inside `.iql`) | Preferred alias — expands to `{{ <resource_name>.idempotency_token }}` |
+| `<resource_name>.idempotency_token` | Global | Scoped form, usable in any downstream resource |
+
+### `idempotency_token`
+
+`idempotency_token` is generated once per resource at session start and stays constant for all retries within that run.  Many providers (for example the AWS Cloud Control API) accept a client-side token to identify whether a request is a genuine new operation or a retry of an earlier one — `idempotency_token` is designed exactly for that purpose.
+
+```sql
+/*+ create */
+INSERT INTO awscc.cloudformation.stacks(
+  StackName,
+  TemplateURL,
+  ClientRequestToken,
+  region
+)
+SELECT
+  '{{ stack_name }}-{{ stack_env }}',
+  '{{ template_url }}',
+  '{{ this.idempotency_token }}',
+  '{{ region }}'
+RETURNING *
+```
+
+:::tip
+
+Use `{{ this.idempotency_token }}` (which expands to `{{ <resource_name>.idempotency_token }}`) when writing queries inside a resource's own `.iql` file.  Use `{{ <resource_name>.idempotency_token }}` to access another resource's token from a downstream resource.
+
+Unlike `{{ uuid() }}`, which generates a **new** UUID on every render, `idempotency_token` is stable for the entire session, making it safe to include in queries that may be retried.
+
+:::
+
 ## Template Filters
 
-StackQL Deploy uses a Jinja2-compatible templating engine and extends it with custom filters for infrastructure provisioning. For a complete reference of all available filters, see the [__Template Filters__](template-filters) documentation.
+StackQL Deploy uses a Jinja2-compatible templating engine and extends it with custom filters for infrastructure provisioning. For a complete reference of all available filters and special variables, see the [__Template Filters__](template-filters) documentation.
 
 Here are a few commonly used filters:
 

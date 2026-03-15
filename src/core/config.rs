@@ -288,17 +288,35 @@ pub fn render_properties(
 /// Injects `resource_name` as a special variable (like `stack_name` and `stack_env`)
 /// containing the current resource's name. Any global values that contain deferred
 /// template expressions (e.g., `{{ resource_name }}`) are re-rendered at this point.
+///
+/// When `idempotency_token` is `Some`, injects two keys into the context:
+/// - `idempotency_token` — unscoped form for direct use inside this resource's templates.
+/// - `{resource_name}.idempotency_token` — scoped form so that `this.idempotency_token`
+///   (which preprocesses to `{resource_name}.idempotency_token`) resolves correctly, and
+///   so downstream resources can reference `{resource_name}.idempotency_token`.
 pub fn get_full_context(
     engine: &TemplateEngine,
     global_context: &HashMap<String, String>,
     resource: &crate::resource::manifest::Resource,
     stack_env: &str,
+    idempotency_token: Option<&str>,
 ) -> HashMap<String, String> {
     debug!("Getting full context for {}...", resource.name);
 
     // Inject resource_name into the context so it's available in props and re-rendered globals
     let mut context_with_resource_name = global_context.clone();
     context_with_resource_name.insert("resource_name".to_string(), resource.name.clone());
+
+    // Inject the per-resource idempotency token when provided.
+    if let Some(token) = idempotency_token {
+        // Unscoped form: {{ idempotency_token }}
+        context_with_resource_name.insert("idempotency_token".to_string(), token.to_string());
+        // Scoped form: {{ this.idempotency_token }} (preprocessed to
+        // {{ {resource_name}.idempotency_token }}) and
+        // {{ {resource_name}.idempotency_token }} for downstream resources.
+        let scoped_key = format!("{}.idempotency_token", resource.name);
+        context_with_resource_name.insert(scoped_key, token.to_string());
+    }
 
     // Re-render any global values that contain deferred template expressions.
     // This allows globals (e.g., global_tags) to use {{ resource_name }} which couldn't
@@ -442,7 +460,7 @@ mod tests {
 
         let resource = make_resource("cross_account_role", vec![]);
 
-        let ctx = get_full_context(&engine, &global_context, &resource, "dev");
+        let ctx = get_full_context(&engine, &global_context, &resource, "dev", None);
 
         assert_eq!(ctx.get("resource_name").unwrap(), "cross_account_role");
         // Existing variables still present
@@ -462,7 +480,7 @@ mod tests {
             vec![make_prop("tag_value", "{{ resource_name }}")],
         );
 
-        let ctx = get_full_context(&engine, &global_context, &resource, "dev");
+        let ctx = get_full_context(&engine, &global_context, &resource, "dev", None);
 
         assert_eq!(ctx.get("tag_value").unwrap(), "cross_account_role");
     }
@@ -482,7 +500,7 @@ mod tests {
 
         let resource = make_resource("cross_account_role", vec![]);
 
-        let ctx = get_full_context(&engine, &global_context, &resource, "dev");
+        let ctx = get_full_context(&engine, &global_context, &resource, "dev", None);
 
         let global_tags = ctx.get("global_tags").unwrap();
         assert!(
@@ -510,8 +528,8 @@ mod tests {
         let res1 = make_resource("vpc_network", vec![]);
         let res2 = make_resource("storage_bucket", vec![]);
 
-        let ctx1 = get_full_context(&engine, &global_context, &res1, "dev");
-        let ctx2 = get_full_context(&engine, &global_context, &res2, "dev");
+        let ctx1 = get_full_context(&engine, &global_context, &res1, "dev", None);
+        let ctx2 = get_full_context(&engine, &global_context, &res2, "dev", None);
 
         assert_eq!(ctx1.get("resource_name").unwrap(), "vpc_network");
         assert_eq!(ctx2.get("resource_name").unwrap(), "storage_bucket");
@@ -545,5 +563,77 @@ mod tests {
         let result = re_render_context_with_deferred_vars(&engine, &context);
 
         assert_eq!(result.get("tag").unwrap(), "resource:my_resource");
+    }
+
+    // ------------------------------------------------------------------
+    // idempotency_token tests
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_idempotency_token_injected_into_context() {
+        let engine = TemplateEngine::new();
+        let mut global_context = HashMap::new();
+        global_context.insert("stack_name".to_string(), "my-stack".to_string());
+        global_context.insert("stack_env".to_string(), "dev".to_string());
+
+        let resource = make_resource("my_resource", vec![]);
+        let token = "550e8400-e29b-41d4-a716-446655440000";
+
+        let ctx = get_full_context(&engine, &global_context, &resource, "dev", Some(token));
+
+        // Unscoped form is available
+        assert_eq!(ctx.get("idempotency_token").unwrap(), token);
+        // Scoped form is available (for `this.idempotency_token` and downstream access)
+        assert_eq!(ctx.get("my_resource.idempotency_token").unwrap(), token);
+    }
+
+    #[test]
+    fn test_idempotency_token_none_not_injected() {
+        let engine = TemplateEngine::new();
+        let mut global_context = HashMap::new();
+        global_context.insert("stack_name".to_string(), "my-stack".to_string());
+        global_context.insert("stack_env".to_string(), "dev".to_string());
+
+        let resource = make_resource("my_resource", vec![]);
+
+        let ctx = get_full_context(&engine, &global_context, &resource, "dev", None);
+
+        assert!(ctx.get("idempotency_token").is_none());
+        assert!(ctx.get("my_resource.idempotency_token").is_none());
+    }
+
+    #[test]
+    fn test_idempotency_token_scoped_key_uses_resource_name() {
+        let engine = TemplateEngine::new();
+        let global_context = HashMap::new();
+        let token = "aaaabbbb-cccc-dddd-eeee-ffffffffffff";
+
+        let res1 = make_resource("vpc_network", vec![]);
+        let res2 = make_resource("storage_bucket", vec![]);
+
+        let ctx1 = get_full_context(&engine, &global_context, &res1, "dev", Some(token));
+        let ctx2 = get_full_context(&engine, &global_context, &res2, "dev", Some(token));
+
+        assert_eq!(ctx1.get("vpc_network.idempotency_token").unwrap(), token);
+        assert_eq!(ctx2.get("storage_bucket.idempotency_token").unwrap(), token);
+        // Unscoped form is the same token in both
+        assert_eq!(ctx1.get("idempotency_token").unwrap(), token);
+        assert_eq!(ctx2.get("idempotency_token").unwrap(), token);
+    }
+
+    #[test]
+    fn test_idempotency_token_usable_in_template() {
+        let engine = TemplateEngine::new();
+        let global_context = HashMap::new();
+        let token = "test-token-1234";
+
+        let resource = make_resource(
+            "my_res",
+            vec![make_prop("client_token", "{{ idempotency_token }}")],
+        );
+
+        let ctx = get_full_context(&engine, &global_context, &resource, "dev", Some(token));
+
+        assert_eq!(ctx.get("client_token").unwrap(), token);
     }
 }
