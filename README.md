@@ -176,8 +176,8 @@ stackql-deploy --help
 
 ## Documentation
 
-Full documentation — manifest reference, query anchors, template filters, provider examples — is at **[stackql-deploy.io/docs](https://stackql-deploy.io/docs)**.
+Full documentation — manifest reference, query anchors, template filters, provider examples is at **[stackql-deploy.io/docs](https://stackql-deploy.io/docs)**.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT - see [LICENSE](LICENSE).
