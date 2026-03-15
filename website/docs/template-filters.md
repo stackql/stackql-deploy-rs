@@ -149,6 +149,75 @@ SELECT
 ;
 ```
 
+## Special Variables
+
+StackQL Deploy injects the following built-in variables automatically — no manifest configuration is required.
+
+### `stack_name`
+
+The name of the stack as declared in `stackql_manifest.yml`.  Available in every template context.
+
+```sql
+INSERT INTO google.compute.networks (project, data__name)
+SELECT '{{ project }}', '{{ stack_name }}-{{ stack_env }}-vpc'
+```
+
+### `stack_env`
+
+The environment name supplied to the CLI (e.g. `dev`, `sit`, `prd`).  Available in every template context.
+
+### `resource_name`
+
+The name of the resource currently being processed.  Available in every resource template context.
+
+```sql
+/*+ create */
+INSERT INTO google.logging.sinks (parent, data__name)
+SELECT 'projects/{{ project }}', '{{ resource_name }}-sink'
+```
+
+### `idempotency_token`
+
+A UUID v4 that is generated **once per resource per session (invocation)** and remains stable for the lifetime of that run.  This is particularly important for asynchronous mutation operations where a provider needs to reliably distinguish a genuine new request from a retry of an earlier request.
+
+| Access form | Where available |
+|---|---|
+| `{{ idempotency_token }}` | Inside the resource's own `.iql` file |
+| `{{ this.idempotency_token }}` | Inside the resource's own `.iql` file (preferred, explicit) |
+| `{{ <resource_name>.idempotency_token }}` | In any downstream resource template |
+
+**Example — passing a client token to AWS Cloud Control API:**
+
+```sql
+/*+ create */
+INSERT INTO awscc.cloudformation.stacks(
+  StackName,
+  TemplateURL,
+  ClientRequestToken,
+  region
+)
+SELECT
+  '{{ stack_name }}-{{ stack_env }}',
+  '{{ template_url }}',
+  '{{ this.idempotency_token }}',
+  '{{ region }}'
+RETURNING *
+```
+
+**Example — referencing another resource's token from a downstream resource:**
+
+```sql
+/*+ create */
+INSERT INTO awscc.some.resource(ParentToken, region)
+SELECT '{{ my_upstream_resource.idempotency_token }}', '{{ region }}'
+```
+
+:::note
+
+`{{ uuid() }}` (see below) generates a **new** UUID on every template render, so retrying the same query produces a different value each time.  Use `{{ this.idempotency_token }}` instead when you need a stable, retry-safe identifier.
+
+:::
+
 ## Global Functions
 
 ### `uuid`

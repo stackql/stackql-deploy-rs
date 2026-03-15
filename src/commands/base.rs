@@ -37,6 +37,9 @@ pub struct CommandRunner {
     pub stack_name: String,
     #[allow(dead_code)]
     pub env_vars: HashMap<String, String>,
+    /// Per-resource idempotency tokens (UUID v4), stable for the lifetime of
+    /// a single session (invocation).  Keyed by resource name.
+    pub idempotency_tokens: HashMap<String, String>,
 }
 
 impl CommandRunner {
@@ -72,6 +75,16 @@ impl CommandRunner {
         // Render globals
         let global_context = render_globals(&engine, &env_vars, &manifest, stack_env, &stack_name);
 
+        // Generate a stable UUID v4 idempotency token for each resource once,
+        // at session start.  The same token is reused on every retry within
+        // this invocation, allowing providers to distinguish retries from new
+        // requests.
+        let idempotency_tokens: HashMap<String, String> = manifest
+            .resources
+            .iter()
+            .map(|r| (r.name.clone(), uuid::Uuid::new_v4().to_string()))
+            .collect();
+
         // Pull providers
         pull_providers(&manifest.providers, &mut client);
 
@@ -84,16 +97,19 @@ impl CommandRunner {
             stack_env: stack_env.to_string(),
             stack_name,
             env_vars,
+            idempotency_tokens,
         }
     }
 
     /// Get the full context for a resource (global + resource properties).
     pub fn get_full_context(&self, resource: &Resource) -> HashMap<String, String> {
+        let token = self.idempotency_tokens.get(&resource.name).map(|s| s.as_str());
         get_full_context(
             &self.engine,
             &self.global_context,
             resource,
             &self.stack_env,
+            token,
         )
     }
 
