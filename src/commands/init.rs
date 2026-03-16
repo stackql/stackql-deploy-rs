@@ -90,6 +90,14 @@ pub fn command() -> Command {
                 .action(ArgAction::Set)
                 .conflicts_with("provider"),
         )
+        .arg(
+            Arg::new("env")
+                .short('e')
+                .long("env")
+                .help("Default environment for examples in generated README (default: dev)")
+                .default_value("dev")
+                .action(ArgAction::Set),
+        )
 }
 
 /// Executes the `init` command to initialize a new project structure.

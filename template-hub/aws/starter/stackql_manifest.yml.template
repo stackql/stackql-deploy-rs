@@ -5,19 +5,19 @@ version: 1
 name: "{{ stack_name }}"
 description: description for "{{ stack_name }}"
 providers:
-  - aws
+  - awscc
 globals:
   - name: region
     description: aws region
     value: "{% raw %}{{ AWS_REGION }}{% endraw %}"
   - name: global_tags
     value:
-      - Key: Provisioner
-        Value: stackql
-      - Key: StackName
+      - Key: 'stackql:stack-name'
         Value: "{% raw %}{{ stack_name }}{% endraw %}"
-      - Key: StackEnv
+      - Key: 'stackql:stack-env'
         Value: "{% raw %}{{ stack_env }}{% endraw %}"
+      - Key: 'stackql:resource-name'
+        Value: "{% raw %}{{ resource_name }}{% endraw %}"
 resources:
   - name: example_vpc
     description: example vpc resource

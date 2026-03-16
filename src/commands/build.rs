@@ -536,6 +536,25 @@ fn run_build(
 
             // Post-deploy state check
             if is_created_or_updated {
+                // After create/update, re-run the exists query to capture
+                // this.* fields (e.g. identifier) that are needed by the
+                // statecheck and exports queries.
+                if let Some(ref eq) = exists_query {
+                    let eq_opts = resource_queries.get("exists").unwrap();
+                    let (_exists, fields) = runner.check_if_resource_exists(
+                        resource,
+                        &eq.0,
+                        eq_opts.options.retries.max(3),
+                        eq_opts.options.retry_delay.max(5),
+                        dry_run,
+                        show_queries,
+                        false,
+                    );
+                    apply_exists_fields(fields, &resource.name, &mut full_context);
+                    // Re-render exports with the newly captured fields
+                    exports_query_str = render_exports!(runner, resource_queries, resource, &full_context);
+                }
+
                 if let Some(sq) = render_statecheck!(runner, resource_queries, resource, &full_context) {
                     let sq_opts = resource_queries.get("statecheck").unwrap();
                     is_correct_state = runner.check_if_resource_is_correct_state(
