@@ -14,7 +14,7 @@ const sidebars = {
     },
     {
       type: 'doc',
-      id: 'install',
+      id: 'installing-stackql-deploy',
       label: 'Install',
     },
     {

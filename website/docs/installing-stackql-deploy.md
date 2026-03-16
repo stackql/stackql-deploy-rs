@@ -1,5 +1,5 @@
 ---
-id: install
+id: installing-stackql-deploy
 title: Install
 hide_title: false
 hide_table_of_contents: false
