@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["download_binary","extract_binary","get_download_url"]};
+window.SIDEBAR_ITEMS = {"fn":["download_binary","extract_binary","find_file_recursive","get_download_url"]};
