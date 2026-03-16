@@ -271,7 +271,7 @@ AND json_extract(tags, '$.StackEnv') = '{{ stack_env }}'
 
 /*+ delete */
 DELETE FROM aws.ec2.vpcs
-WHERE data__Identifier = '{{ vpc_id }}'
+WHERE Identifier = '{{ vpc_id }}'
 AND region = '{{ region }}';
 ```
 
@@ -343,7 +343,7 @@ WHERE cidr_block = '{{ subnet_cidr_block }}';
 
 /*+ delete */
 DELETE FROM aws.ec2.subnets
-WHERE data__Identifier = '{{ subnet_id }}'
+WHERE Identifier = '{{ subnet_id }}'
 AND region = '{{ region }}';
 ```
 

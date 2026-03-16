@@ -37,5 +37,5 @@ AND group_name = '{{ group_name }}'
 
 /*+ delete */
 DELETE FROM aws.ec2.security_groups
-WHERE data__Identifier = '{{ security_group_id }}'
+WHERE Identifier = '{{ security_group_id }}'
 AND region = '{{ region }}';

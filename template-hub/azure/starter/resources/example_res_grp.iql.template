@@ -11,7 +11,7 @@ AND resourceGroupName = '{% raw %}{{ resource_group_name }}{% endraw %}'
 INSERT INTO azure.resources.resource_groups(
    resourceGroupName,
    subscriptionId,
-   data__location
+   location
 )
 SELECT
    '{% raw %}{{ resource_group_name }}{% endraw %}',

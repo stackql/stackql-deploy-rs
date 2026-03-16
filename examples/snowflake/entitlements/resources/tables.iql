@@ -18,11 +18,11 @@ AND comment = '{{ comment }}';
 
 /*+ create */
 INSERT INTO snowflake.table.tables (
-data__name,
-data__kind,
-data__columns,
-data__constraints,
-data__comment,
+name,
+kind,
+columns,
+constraints,
+comment,
 database_name,
 schema_name,
 endpoint

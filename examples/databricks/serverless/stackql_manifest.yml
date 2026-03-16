@@ -347,7 +347,7 @@ resources:
   #         - "MANAGE"
   #   sql: |
   #     UPDATE databricks_workspace.unitycatalog.grants
-  #     SET data__changes = '[{"add": {{ privileges }},"principal": "{{ databricks_group_name }}"}]' 
+  #     SET changes = '[{"add": {{ privileges }},"principal": "{{ databricks_group_name }}"}]' 
   #     WHERE full_name = '{{ storage_credential_name }}' AND
   #     securable_type = 'storage_credential' AND
   #     deployment_name = '{{ databricks_deployment_name }}';
@@ -378,7 +378,7 @@ resources:
   #         - "MANAGE"
   #   sql: |
   #     UPDATE databricks_workspace.unitycatalog.grants
-  #     SET data__changes = '[{"add": {{ privileges }},"principal": "{{ databricks_group_name }}"}]' 
+  #     SET changes = '[{"add": {{ privileges }},"principal": "{{ databricks_group_name }}"}]' 
   #     WHERE full_name = '{{ external_location_name }}' AND
   #     securable_type = 'external_location' AND
   #     deployment_name = '{{ databricks_deployment_name }}';

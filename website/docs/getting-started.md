@@ -144,7 +144,7 @@ AND resourceGroupName = '{{ resource_group_name }}'
 INSERT INTO azure.resources.resource_groups(
    resourceGroupName,
    subscriptionId,
-   data__location
+   location
 )
 SELECT
    '{{ resource_group_name }}',

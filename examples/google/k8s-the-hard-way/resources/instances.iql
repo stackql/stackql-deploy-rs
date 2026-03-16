@@ -16,15 +16,15 @@ INSERT INTO google.compute.instances
  (
   zone,
   project,
-  data__name,
-  data__machineType,
-  data__canIpForward,
-  data__deletionProtection,
-  data__scheduling,
-  data__networkInterfaces,
-  data__disks,
-  data__serviceAccounts,
-  data__tags
+  name,
+  machineType,
+  canIpForward,
+  deletionProtection,
+  scheduling,
+  networkInterfaces,
+  disks,
+  serviceAccounts,
+  tags
  ) 
  SELECT
 '{{ default_zone }}',

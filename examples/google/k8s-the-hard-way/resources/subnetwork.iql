@@ -10,10 +10,10 @@ INSERT INTO google.compute.subnetworks
 (
  project,
  region,
- data__name,
- data__network,
- data__ipCidrRange,
- data__privateIpGoogleAccess
+ name,
+ network,
+ ipCidrRange,
+ privateIpGoogleAccess
 ) 
 SELECT
 '{{ project }}',
@@ -26,10 +26,10 @@ true
 /*+ update */
 UPDATE google.compute.subnetworks
 SET
-data__name = '{{ subnet_name }}',
-data__network = '{{ vpc_link }}',
-data__ipCidrRange = '{{ ip_cidr_range }}',
-data__privateIpGoogleAccess = true
+name = '{{ subnet_name }}',
+network = '{{ vpc_link }}',
+ipCidrRange = '{{ ip_cidr_range }}',
+privateIpGoogleAccess = true
 WHERE subnetwork = '{{ subnet_name }}' 
 AND project = '{{ project }}'
 AND region = '{{ region }}'

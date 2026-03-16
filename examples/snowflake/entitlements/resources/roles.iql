@@ -1,7 +1,7 @@
 /*+ createorupdate */
 INSERT INTO snowflake.role.roles (
-data__name,
-data__comment,
+name,
+comment,
 endpoint,
 createMode
 )

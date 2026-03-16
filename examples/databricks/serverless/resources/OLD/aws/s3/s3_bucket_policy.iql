@@ -19,12 +19,12 @@ SELECT
 
 /*+ update */
 update aws.s3.bucket_policies 
-set data__PatchDocument = string('{{ {
+set PatchDocument = string('{{ {
     "PolicyDocument": policy_document
     } | generate_patch_document }}') 
 WHERE 
 region = '{{ region }}' 
-AND data__Identifier = '{{ aws_s3_workspace_bucket_name }}';
+AND Identifier = '{{ aws_s3_workspace_bucket_name }}';
 
 /*+ statecheck, retries=3, retry_delay=5 */
 SELECT COUNT(*) as count FROM (
@@ -32,5 +32,5 @@ SELECT COUNT(*) as count FROM (
         AWS_POLICY_EQUAL(policy_document, '{{ policy_document }}') as test_policy_document
     FROM aws.s3.bucket_policies 
     WHERE region = '{{ region }}' 
-    AND data__Identifier = '{{ aws_s3_workspace_bucket_name }}')t
+    AND Identifier = '{{ aws_s3_workspace_bucket_name }}')t
 WHERE test_policy_document = 1;

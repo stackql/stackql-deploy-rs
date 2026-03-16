@@ -53,9 +53,9 @@ AND project = '{{ project }}'
 INSERT INTO google.compute.networks
 (
  project,
- data__name,
- data__autoCreateSubnetworks,
- data__routingConfig
+ name,
+ autoCreateSubnetworks,
+ routingConfig
 ) 
 SELECT
 '{{ project }}',
@@ -74,9 +74,9 @@ INSERT INTO azure.network.virtual_networks(
    virtualNetworkName,
    resourceGroupName, 
    subscriptionId, 
-   data__location,
-   data__properties,
-   data__tags   
+   location,
+   properties,
+   tags   
 )
 SELECT
    '{{ vnet_name }}',
@@ -124,12 +124,12 @@ stackql  >>show methods in azure.network.virtual_networks;
 ```sql
 /*+ createorupdate */
 update aws.s3.buckets 
-set data__PatchDocument = string('{{ {
+set PatchDocument = string('{{ {
     "NotificationConfiguration": transfer_notification_config
     } | generate_patch_document }}') 
 WHERE 
 region = '{{ region }}' 
-AND data__Identifier = '{{ transfer_bucket_name }}';
+AND Identifier = '{{ transfer_bucket_name }}';
 ```
 
 ### `delete`
@@ -352,7 +352,7 @@ INSERT INTO google.compute.addresses
 (
  project,
  region,
- data__name
+ name
 ) 
 SELECT
 '{{ project }}',
@@ -454,7 +454,7 @@ SELECT
 target_key_id as logging_kms_key_id
 FROM aws.kms.aliases
 WHERE region = '{{ region }}'
-AND data__Identifier = 'alias/{{ stack_name }}/{{ stack_env }}/logging';
+AND Identifier = 'alias/{{ stack_name }}/{{ stack_env }}/logging';
 ```
 
 </File>

@@ -3,9 +3,9 @@ INSERT INTO azure.network.public_ip_addresses(
    publicIpAddressName,
    resourceGroupName, 
    subscriptionId, 
-   data__location,
-   data__properties,
-   data__tags   
+   location,
+   properties,
+   tags   
 )
 SELECT
    '{{ public_ip_name }}',

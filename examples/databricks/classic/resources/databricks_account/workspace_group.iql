@@ -7,7 +7,7 @@ AND displayName = '{{ display_name }}'
 /*+ create */
 INSERT INTO databricks_account.iam.groups (
 account_id,
-data__displayName
+displayName
 )
 SELECT 
 '{{ databricks_account_id }}',

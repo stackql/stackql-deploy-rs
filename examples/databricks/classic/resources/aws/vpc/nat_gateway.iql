@@ -49,5 +49,5 @@ AND json_extract(tags, '$.StackEnv') = '{{ stack_env }}'
 
 /*+ delete */
 DELETE FROM aws.ec2.nat_gateways
-WHERE data__Identifier = '{{ nat_gateway_id }}'
+WHERE Identifier = '{{ nat_gateway_id }}'
 AND region = '{{ region }}';

@@ -1,9 +1,9 @@
 /*+ createorupdate */
 INSERT INTO snowflake.sqlapi.statements (
-data__statement,
-data__timeout,
-data__database,
-data__schema,
+statement,
+timeout,
+database,
+schema,
 "User-Agent",
 endpoint
 )

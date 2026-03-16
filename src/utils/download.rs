@@ -23,7 +23,7 @@
 //! ```
 
 use std::fs::{self, File};
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -58,8 +58,11 @@ pub fn download_binary() -> Result<PathBuf, AppError> {
 
     // Download the file with progress bar
     debug!("Downloading from {}", download_url);
-    let client = Client::new();
-    let response = client
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(300))
+        .build()
+        .map_err(|e| AppError::CommandFailed(format!("Failed to create HTTP client: {}", e)))?;
+    let mut response = client
         .get(&download_url)
         .send()
         .map_err(|e| AppError::CommandFailed(format!("Failed to download: {}", e)))?;
@@ -73,12 +76,20 @@ pub fn download_binary() -> Result<PathBuf, AppError> {
             .progress_chars("#>-"));
 
     let mut file = File::create(&archive_path).map_err(AppError::IoError)?;
-    let mut _downloaded: u64 = 0;
-    let stream = response
-        .bytes()
-        .map_err(|e| AppError::CommandFailed(format!("Failed to read response: {}", e)))?;
-
-    file.write_all(&stream).map_err(AppError::IoError)?;
+    let mut buffer = [0u8; 8192];
+    let mut downloaded: u64 = 0;
+    loop {
+        let bytes_read = response
+            .read(&mut buffer)
+            .map_err(|e| AppError::CommandFailed(format!("Failed to read response: {}", e)))?;
+        if bytes_read == 0 {
+            break;
+        }
+        file.write_all(&buffer[..bytes_read])
+            .map_err(AppError::IoError)?;
+        downloaded += bytes_read as u64;
+        progress_bar.set_position(downloaded);
+    }
     progress_bar.finish_with_message("Download complete");
 
     // Extract the file based on platform

@@ -56,5 +56,5 @@ AND json_extract(tags, '$.StackEnv') = '{{ stack_env }}';
 
 /*+ delete */
 DELETE FROM aws.ec2.vpc_endpoints
-WHERE data__Identifier = 's3_gateway_endpoint_id'
+WHERE Identifier = 's3_gateway_endpoint_id'
 AND region = 'us-east-1';

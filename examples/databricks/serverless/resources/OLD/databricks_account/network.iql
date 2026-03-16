@@ -7,10 +7,10 @@ AND network_name = '{{ databricks_network_name }}'
 /*+ create */
 INSERT INTO databricks_account.provisioning.networks (
 account_id,
-data__network_name,
-data__vpc_id,
-data__subnet_ids,
-data__security_group_ids
+network_name,
+vpc_id,
+subnet_ids,
+security_group_ids
 )
 SELECT 
 '{{ databricks_account_id }}',

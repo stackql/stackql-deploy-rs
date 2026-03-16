@@ -9,7 +9,7 @@ INSERT INTO google.compute.addresses
 (
  project,
  region,
- data__name
+ name
 ) 
 SELECT
 '{{ project }}',

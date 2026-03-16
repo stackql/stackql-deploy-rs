@@ -35,5 +35,5 @@ AND vpc_id = '{{ vpc_id }}'
 
 /*+ delete */
 DELETE FROM aws.ec2.vpc_gateway_attachments
-WHERE data__Identifier = 'IGW|{{ vpc_id }}'
+WHERE Identifier = 'IGW|{{ vpc_id }}'
 AND region = '{{ region }}';

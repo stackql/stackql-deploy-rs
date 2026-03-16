@@ -1,23 +1,20 @@
-#
-# aws starter project manifest file, add and update values as needed
-#
 version: 1
-name: "aws-stack"
-description: description for "aws-stack"
+name: "aws-vpc-webserver"
+description: Provisions a complete AWS networking stack (VPC, subnet, internet gateway, route table, security group) with an Apache web server EC2 instance.
 providers:
-  - aws
+  - awscc
 globals:
   - name: region
     description: aws region
     value: "{{ AWS_REGION }}"
   - name: global_tags
     value:
-      - Key: Provisioner
-        Value: stackql
-      - Key: StackName
+      - Key: 'stackql:stack-name'
         Value: "{{ stack_name }}"
-      - Key: StackEnv
+      - Key: 'stackql:stack-env'
         Value: "{{ stack_env }}"
+      - Key: 'stackql:resource-name'
+        Value: "{{ resource_name }}"
 resources:
   - name: example_vpc
     props:

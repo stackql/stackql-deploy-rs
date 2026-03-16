@@ -11,9 +11,9 @@ AND project = '{% raw %}{{ project }}{% endraw %}'
 INSERT INTO google.compute.networks
 (
  project,
- data__name,
- data__autoCreateSubnetworks,
- data__routingConfig
+ name,
+ autoCreateSubnetworks,
+ routingConfig
 ) 
 SELECT
 '{% raw %}{{ project }}{% endraw %}',
@@ -23,8 +23,8 @@ false,
 
 /*+ update */
 UPDATE google.compute.networks
-SET data__autoCreateSubnetworks = false
-AND data__routingConfig = '{"routingMode": "REGIONAL"}'
+SET autoCreateSubnetworks = false
+AND routingConfig = '{"routingMode": "REGIONAL"}'
 WHERE network = '{% raw %}{{ vpc_name }}{% endraw %}' AND project = '{% raw %}{{ project }}{% endraw %}'
 
 /*+ statecheck, retries=5, retry_delay=10 */

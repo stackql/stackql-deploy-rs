@@ -10,7 +10,7 @@ INSERT INTO databricks_account.iam.workspace_permission_assignments (
 account_id,
 principal_id,
 workspace_id,
-data__permissions
+permissions
 )
 SELECT 
 '{{ databricks_account_id }}',

@@ -11,7 +11,9 @@
       "Bash(cargo tree:*)",
       "Bash(where llvm-config:*)",
       "Read(//c/msys64/mingw64/bin/**)",
-      "Read(//c/msys64/clang64/bin/**)"
+      "Read(//c/msys64/clang64/bin/**)",
+      "Bash(cargo doc:*)",
+      "Bash(grep -r impl.*Read.*for.*Response c:/LocalGitRepos/stackql/stackql-deploy-rs/target/doc/reqwest/blocking/struct.Response.html)"
     ]
   }
 }
