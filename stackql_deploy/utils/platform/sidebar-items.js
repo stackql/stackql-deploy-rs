@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Platform"],"fn":["get_binary_name","get_platform"]};

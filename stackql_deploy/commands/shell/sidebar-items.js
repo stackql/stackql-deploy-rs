@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["command","execute","normalize_query","print_table"]};

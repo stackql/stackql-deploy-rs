@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["rule_unique_resource_names","validate_manifest"],"struct":["ValidationError"]};

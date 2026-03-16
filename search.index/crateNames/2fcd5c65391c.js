@@ -1,0 +1,1 @@
+rd_("nstackql_deploy")

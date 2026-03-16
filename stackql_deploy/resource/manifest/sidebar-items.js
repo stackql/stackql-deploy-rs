@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ManifestError"],"fn":["default_resource_type","default_version","load_file_contents","parse_file_directive","resolve_file_directives","resolve_manifest_file_directives"],"struct":["GlobalVar","Manifest","Property","PropertyValue","Resource"],"type":["ManifestResult"]};

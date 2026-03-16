@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["TemplateSource"],"fn":["build_template_url","command","create_manifest_file","create_project_structure","create_readme_file","create_resource_file","execute","fetch_template","get_template_content","normalize_github_url","render_template","validate_provider"]};

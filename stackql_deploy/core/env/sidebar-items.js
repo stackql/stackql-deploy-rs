@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["load_env_vars","parse_env_var"]};

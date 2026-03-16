@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["get_installed_providers","get_stackql_path","get_version"],"struct":["Provider","VersionInfo"]};

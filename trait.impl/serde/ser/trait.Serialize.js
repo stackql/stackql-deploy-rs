@@ -1,0 +1,9 @@
+(function() {
+    const implementors = Object.fromEntries([["stackql_deploy",[["impl <a class=\"trait\" href=\"https://docs.rs/serde/1.0.219/serde/ser/trait.Serialize.html\" title=\"trait serde::ser::Serialize\">Serialize</a> for <a class=\"struct\" href=\"stackql_deploy/resource/manifest/struct.GlobalVar.html\" title=\"struct stackql_deploy::resource::manifest::GlobalVar\">GlobalVar</a>",0],["impl <a class=\"trait\" href=\"https://docs.rs/serde/1.0.219/serde/ser/trait.Serialize.html\" title=\"trait serde::ser::Serialize\">Serialize</a> for <a class=\"struct\" href=\"stackql_deploy/resource/manifest/struct.Manifest.html\" title=\"struct stackql_deploy::resource::manifest::Manifest\">Manifest</a>",0],["impl <a class=\"trait\" href=\"https://docs.rs/serde/1.0.219/serde/ser/trait.Serialize.html\" title=\"trait serde::ser::Serialize\">Serialize</a> for <a class=\"struct\" href=\"stackql_deploy/resource/manifest/struct.Property.html\" title=\"struct stackql_deploy::resource::manifest::Property\">Property</a>",0],["impl <a class=\"trait\" href=\"https://docs.rs/serde/1.0.219/serde/ser/trait.Serialize.html\" title=\"trait serde::ser::Serialize\">Serialize</a> for <a class=\"struct\" href=\"stackql_deploy/resource/manifest/struct.PropertyValue.html\" title=\"struct stackql_deploy::resource::manifest::PropertyValue\">PropertyValue</a>",0],["impl <a class=\"trait\" href=\"https://docs.rs/serde/1.0.219/serde/ser/trait.Serialize.html\" title=\"trait serde::ser::Serialize\">Serialize</a> for <a class=\"struct\" href=\"stackql_deploy/resource/manifest/struct.Resource.html\" title=\"struct stackql_deploy::resource::manifest::Resource\">Resource</a>",0]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":59,"fragment_lengths":[1608]}

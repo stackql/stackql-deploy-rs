@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["check_and_start_server","extract_pid_from_windows_tasklist","extract_port_from_ps","extract_port_from_windows_tasklist","find_all_running_servers","get_server_pid","is_server_running","start_server","stop_server"],"struct":["RunningServer","StartServerOptions"]};

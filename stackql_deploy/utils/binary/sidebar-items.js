@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["binary_exists_in_path","get_binary_path"]};

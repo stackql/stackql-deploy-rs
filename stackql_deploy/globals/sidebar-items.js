@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["init_globals","server_host","server_port"],"static":["STACKQL_CONNECTION_STRING","STACKQL_SERVER_HOST","STACKQL_SERVER_PORT"]};

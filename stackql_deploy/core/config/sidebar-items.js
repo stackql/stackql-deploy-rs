@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["get_full_context","get_resource_type","is_json","prepare_query_context","re_render_context_with_deferred_vars","render_globals","render_properties","render_string_value","render_value","to_sql_compatible_json","to_sql_compatible_value"]};

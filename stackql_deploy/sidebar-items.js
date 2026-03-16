@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["main"],"macro":["print_error","print_info","print_success"],"mod":["app","commands","core","error","globals","resource","template","utils"]};

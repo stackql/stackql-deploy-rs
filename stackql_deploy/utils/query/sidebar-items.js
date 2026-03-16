@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["QueryResult"],"fn":["execute_query"],"struct":["QueryResultColumn","QueryResultRow"]};

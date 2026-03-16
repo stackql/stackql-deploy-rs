@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["get_queries","load_sql_queries","parse_anchor","preprocess_inline_dicts","preprocess_jinja2_compat","preprocess_this_prefix","render_inline_template","render_query","split_dict_entries"],"struct":["ParsedQuery","QueryOptions"],"type":["SqlQueriesResult"]};
