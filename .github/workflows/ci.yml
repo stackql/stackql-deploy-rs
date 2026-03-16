@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: ['**']
+    branches: [main]
     paths:
       - 'src/**'
       - 'build.rs'
@@ -23,10 +23,10 @@ env:
 
 jobs:
 
-  # Runs on: push to any non-main branch, PR to main
+  # Runs on: PR to main
   lint:
     name: Lint
-    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref != 'refs/heads/main')
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -37,10 +37,10 @@ jobs:
       - name: Run lint
         run: bash ci-scripts/lint.sh
 
-  # Runs on: push to any non-main branch, PR to main
+  # Runs on: PR to main
   test:
     name: Tests
-    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref != 'refs/heads/main')
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
