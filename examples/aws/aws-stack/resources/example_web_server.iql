@@ -67,5 +67,5 @@ AND json_extract(tags, '$.Name') = '{{ instance_name }}'
 
 /*+ delete */
 DELETE FROM aws.ec2.instances
-WHERE data__Identifier = '{{ instance_id }}'
+WHERE Identifier = '{{ instance_id }}'
 AND region = '{{ region }}';

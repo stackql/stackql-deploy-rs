@@ -8,10 +8,10 @@ WHERE project = '{{ project }}'
 INSERT INTO google.compute.target_pools(
   project,
   region,
-  data__name,
-  data__healthChecks,
-  data__instances,
-  data__sessionAffinity
+  name,
+  healthChecks,
+  instances,
+  sessionAffinity
 )
 SELECT
   '{{ project }}',

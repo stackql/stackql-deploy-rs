@@ -12,11 +12,11 @@ AND name IN ({% for i in range(num_routes | int) %}'{{ route_name_prefix }}-{{ l
 {% for route in route_data | from_json %}
 INSERT INTO google.compute.routes(
   project,
-  data__destRange,
-  data__name,
-  data__network,
-  data__nextHopIp,
-  data__priority
+  destRange,
+  name,
+  network,
+  nextHopIp,
+  priority
 )
 SELECT
   '{{ project }}',

@@ -7,8 +7,8 @@ AND storage_configuration_name = '{{ storage_configuration_name }}'
 /*+ create */
 INSERT INTO databricks_account.provisioning.storage (
 account_id,
-data__storage_configuration_name,
-data__root_bucket_info
+storage_configuration_name,
+root_bucket_info
 )
 SELECT 
 '{{ databricks_account_id }}',

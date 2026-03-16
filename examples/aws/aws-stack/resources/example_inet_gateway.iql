@@ -48,5 +48,5 @@ AND json_extract(tags, '$.StackEnv') = '{{ stack_env }}'
 
 /*+ delete */
 DELETE FROM aws.ec2.internet_gateways
-WHERE data__Identifier = '{{ internet_gateway_id }}'
+WHERE Identifier = '{{ internet_gateway_id }}'
 AND region = '{{ region }}';

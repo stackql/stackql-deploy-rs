@@ -1,10 +1,10 @@
 /*+ exists */
 SELECT COUNT(*) as count FROM
 (
-SELECT data__Identifier
+SELECT Identifier
 FROM aws.ec2.routes
 WHERE region = '{{ region }}'
-AND data__Identifier = '{{ route_table_id }}|0.0.0.0/0'
+AND Identifier = '{{ route_table_id }}|0.0.0.0/0'
 ) t; 
 
 /*+ create */
@@ -23,19 +23,19 @@ SELECT
 /*+ statecheck, retries=5, retry_delay=5 */
 SELECT COUNT(*) as count FROM
 (
-SELECT data__Identifier
+SELECT Identifier
 FROM aws.ec2.routes
 WHERE region = '{{ region }}'
-AND data__Identifier = '{{ route_table_id }}|0.0.0.0/0'
+AND Identifier = '{{ route_table_id }}|0.0.0.0/0'
 ) t;
 
 /*+ exports */
-SELECT data__Identifier as inet_route_indentifer
+SELECT Identifier as inet_route_indentifer
 FROM aws.ec2.routes
 WHERE region = '{{ region }}'
-AND data__Identifier = '{{ route_table_id }}|0.0.0.0/0';
+AND Identifier = '{{ route_table_id }}|0.0.0.0/0';
 
 /*+ delete */
 DELETE FROM aws.ec2.routes
-WHERE data__Identifier = '{{ inet_route_indentifer }}'
+WHERE Identifier = '{{ inet_route_indentifer }}'
 AND region = '{{ region }}';

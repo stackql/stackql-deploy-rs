@@ -316,9 +316,9 @@ AND project = '{{ project }}'
 INSERT INTO google.compute.networks
 (
  project,
- data__name,
- data__autoCreateSubnetworks,
- data__routingConfig
+ name,
+ autoCreateSubnetworks,
+ routingConfig
 ) 
 SELECT
 '{{ project }}',
@@ -328,8 +328,8 @@ false,
 
 /*+ update */
 UPDATE google.compute.networks
-SET data__autoCreateSubnetworks = false
-AND data__routingConfig = '{"routingMode": "REGIONAL"}'
+SET autoCreateSubnetworks = false
+AND routingConfig = '{"routingMode": "REGIONAL"}'
 WHERE network = '{{ vpc_name }}' AND project = '{{ project }}'
 
 /*+ statecheck, retries=5, retry_delay=10 */
@@ -365,11 +365,11 @@ AND name = '{{ fw_name }}'
 INSERT INTO google.compute.firewalls
 (
  project,
- data__name,
- data__network,
- data__direction,
- data__sourceRanges,
- data__allowed
+ name,
+ network,
+ direction,
+ sourceRanges,
+ allowed
 ) 
 SELECT
  '{{ project }}',
@@ -399,10 +399,10 @@ AND test_source_ranges = 1;
 /*+ update */
 UPDATE google.compute.firewalls
 SET
- data__network = '{{ vpc_link }}',
- data__direction = '{{ fw_direction }}',
- data__sourceRanges = '{{ fw_source_ranges }}',
- data__allowed = '{{ fw_allowed }}'
+ network = '{{ vpc_link }}',
+ direction = '{{ fw_direction }}',
+ sourceRanges = '{{ fw_source_ranges }}',
+ allowed = '{{ fw_allowed }}'
 WHERE firewall = '{{ fw_name}}'
 AND project = '{{ project }}'
 

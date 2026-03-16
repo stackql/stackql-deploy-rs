@@ -6,15 +6,15 @@ AND httpHealthCheck = '{{ health_check_name }}'
 /*+ create */
 INSERT INTO google.compute.http_health_checks(
   project,
-  data__name,
-  data__checkIntervalSec,
-  data__description,
-  data__healthyThreshold,
-  data__host,
-  data__port,
-  data__requestPath,
-  data__timeoutSec,
-  data__unhealthyThreshold
+  name,
+  checkIntervalSec,
+  description,
+  healthyThreshold,
+  host,
+  port,
+  requestPath,
+  timeoutSec,
+  unhealthyThreshold
 )
 SELECT
   '{{ project }}',

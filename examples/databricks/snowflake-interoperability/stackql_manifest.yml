@@ -83,7 +83,7 @@ resources:
     props: []
     sql: |
       UPDATE databricks_workspace.unitycatalog.metastores
-      SET data__external_access_enabled = 'true'
+      SET external_access_enabled = 'true'
       WHERE id = '{{ metastore_id }}' AND
       deployment_name = '{{ databricks_deployment_name }}';
 
@@ -112,7 +112,7 @@ resources:
           - "MANAGE"
     sql: |
       UPDATE databricks_workspace.unitycatalog.grants
-      SET data__changes = '[{"add": {{ privileges }},"principal": "{{ databricks_admin_group }}"}]' 
+      SET changes = '[{"add": {{ privileges }},"principal": "{{ databricks_admin_group }}"}]' 
       WHERE full_name = '{{ catalog_name }}' AND
       securable_type = 'catalog' AND
       deployment_name = '{{ databricks_deployment_name }}';
@@ -158,7 +158,7 @@ resources:
           - "USE_SCHEMA"
     sql: |
       UPDATE databricks_workspace.unitycatalog.grants
-      SET data__changes = '[{"add": {{ privileges }},"principal": "{{ service_principal_application_id }}"}]' 
+      SET changes = '[{"add": {{ privileges }},"principal": "{{ service_principal_application_id }}"}]' 
       WHERE full_name = '{{ catalog_name }}' AND
       securable_type = 'catalog' AND
       deployment_name = '{{ databricks_deployment_name }}';

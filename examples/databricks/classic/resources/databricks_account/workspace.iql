@@ -7,11 +7,11 @@ AND workspace_name = '{{ workspace_name }}'
 /*+ create */
 INSERT INTO databricks_account.provisioning.workspaces (
 account_id,
-data__workspace_name,
-data__aws_region,
-data__credentials_id,
-data__storage_configuration_id,
-data__pricing_tier
+workspace_name,
+aws_region,
+credentials_id,
+storage_configuration_id,
+pricing_tier
 )
 SELECT 
 '{{ databricks_account_id }}',

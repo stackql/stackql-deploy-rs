@@ -1,8 +1,8 @@
 /*+ create */
 INSERT INTO databricks_workspace.iam.service_principals (
 deployment_name,
-data__displayName,
-data__active
+displayName,
+active
 )
 SELECT 
 '{{ databricks_deployment_name }}',

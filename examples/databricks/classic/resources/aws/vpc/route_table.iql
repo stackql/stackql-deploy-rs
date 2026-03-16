@@ -50,5 +50,5 @@ AND json_extract(tags, '$.Name') = '{{ route_table_name }}'
 
 /*+ delete */
 DELETE FROM aws.ec2.route_tables
-WHERE data__Identifier = '{{ route_table_id }}'
+WHERE Identifier = '{{ route_table_id }}'
 AND region = '{{ region }}';

@@ -63,5 +63,5 @@ AND json_extract(tags, '$.StackEnv') = '{% raw %}{{ stack_env }}{% endraw %}'
 
 /*+ delete */
 DELETE FROM aws.ec2.vpcs
-WHERE data__Identifier = '{% raw %}{{ vpc_id }}{% endraw %}'
+WHERE Identifier = '{% raw %}{{ vpc_id }}{% endraw %}'
 AND region = '{% raw %}{{ region }}{% endraw %}';

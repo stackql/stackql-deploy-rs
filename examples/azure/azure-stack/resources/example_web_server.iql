@@ -3,9 +3,9 @@ INSERT INTO azure.compute.virtual_machines(
   resourceGroupName,
   subscriptionId,
   vmName,
-  data__location,
-  data__properties,
-  data__tags
+  location,
+  properties,
+  tags
 )
 SELECT
   '{{ resource_group_name }}',

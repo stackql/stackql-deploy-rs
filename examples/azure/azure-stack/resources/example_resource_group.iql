@@ -7,8 +7,8 @@ AND resourceGroupName = '{{ resource_group_name }}'
 INSERT INTO azure.resources.resource_groups(
    resourceGroupName,
    subscriptionId,
-   data__location,
-   data__tags
+   location,
+   tags
 )
 SELECT
    '{{ resource_group_name }}',

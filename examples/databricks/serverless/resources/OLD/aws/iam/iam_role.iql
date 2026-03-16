@@ -50,7 +50,7 @@ SELECT COUNT(*) as count FROM (
         AWS_POLICY_EQUAL(assume_role_policy_document, '{{ assume_role_policy_document }}') as test_assume_role_policy_doc,
         AWS_POLICY_EQUAL(policies, '{{ policies }}') as test_policies
     FROM aws.iam.roles
-    WHERE data__Identifier = '{{ role_name }}')t
+    WHERE Identifier = '{{ role_name }}')t
 WHERE test_assume_role_policy_doc = 1
 AND test_policies = 1
 AND path = '{{ path }}';
@@ -60,7 +60,7 @@ SELECT
 '{{ role_name }}' as aws_iam_role_name,
 arn as aws_iam_role_arn
 FROM aws.iam.roles
-WHERE data__Identifier = '{{ role_name }}'
+WHERE Identifier = '{{ role_name }}'
 
 /*+ delete */
 DELETE FROM awscc.iam.roles

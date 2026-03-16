@@ -25,18 +25,18 @@ AND user_task_timeout_ms = {{ user_task_timeout_ms }};
 
 /*+ create */
 INSERT INTO snowflake.schema.schemas (
-data__name,
-data__kind,
-data__managed_access,
-data__data_retention_time_in_days,
-data__log_level,
-data__max_data_extension_time_in_days,
-data__suspend_task_after_num_failures,
-data__trace_level,
-data__user_task_managed_initial_warehouse_size,
-data__serverless_task_min_statement_size,
-data__serverless_task_max_statement_size,
-data__user_task_timeout_ms,
+name,
+kind,
+managed_access,
+data_retention_time_in_days,
+log_level,
+max_data_extension_time_in_days,
+suspend_task_after_num_failures,
+trace_level,
+user_task_managed_initial_warehouse_size,
+serverless_task_min_statement_size,
+serverless_task_max_statement_size,
+user_task_timeout_ms,
 database_name,
 endpoint
 )
@@ -74,7 +74,7 @@ user_task_timeout_ms = {{ user_task_timeout_ms }}
 WHERE 
 database_name = '{{ database_name }}'
 AND name = '{{ schema_name }}'
-AND data__name = '{{ schema_name }}'
+AND name = '{{ schema_name }}'
 AND endpoint = '{{ endpoint }}';
 
 /*+ exports */

@@ -2,7 +2,7 @@
 SELECT COUNT(*) as count 
 FROM aws.s3.buckets
 WHERE region = '{{ region }}'
-AND data__Identifier = '{{ bucket_name }}'
+AND Identifier = '{{ bucket_name }}'
 
 /*+ create */
 INSERT INTO aws.s3.buckets (
@@ -25,7 +25,7 @@ SELECT
 
 /*+ update */
 update aws.s3.buckets 
-set data__PatchDocument = string('{{ {
+set PatchDocument = string('{{ {
     "OwnershipControls": ownership_controls,
     "BucketEncryption": bucket_encryption,
     "PublicAccessBlockConfiguration": public_access_block_configuration,
@@ -34,7 +34,7 @@ set data__PatchDocument = string('{{ {
     } | generate_patch_document }}') 
 WHERE 
 region = '{{ region }}' 
-AND data__Identifier = '{{ bucket_name }}'
+AND Identifier = '{{ bucket_name }}'
 
 /*+ exports, retries=3, retry_delay=5 */
 SELECT 
@@ -50,7 +50,7 @@ FROM (
         JSON_EQUAL(versioning_configuration, '{{ versioning_configuration }}') as test_versioning_configuration
     FROM aws.s3.buckets 
     WHERE region = '{{ region }}' 
-    AND data__Identifier = '{{ bucket_name }}'
+    AND Identifier = '{{ bucket_name }}'
 )t
 WHERE test_ownership_controls = 1
 AND test_encryption = 1

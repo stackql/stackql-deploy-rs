@@ -68,13 +68,13 @@ Resource `.iql` files define mutation and check queries using SQL anchors:
 ```sql
 /*+ create */
 INSERT INTO azure.resources.resource_groups(
-  resourceGroupName, subscriptionId, data__location
+  resourceGroupName, subscriptionId, location
 )
 SELECT '{{ resource_group_name }}', '{{ subscription_id }}', '{{ location }}'
 
 /*+ update */
 UPDATE azure.resources.resource_groups
-SET data__location = '{{ location }}'
+SET location = '{{ location }}'
 WHERE resourceGroupName = '{{ resource_group_name }}'
   AND subscriptionId = '{{ subscription_id }}'
 

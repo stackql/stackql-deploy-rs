@@ -54,12 +54,12 @@ Generates a patch document according to [RFC6902](https://datatracker.ietf.org/d
 
 ```sql
 update aws.s3.buckets 
-set data__PatchDocument = string('{{ {
+set PatchDocument = string('{{ {
     "NotificationConfiguration": transfer_notification_config
     } | generate_patch_document }}') 
 WHERE 
 region = '{{ region }}' 
-AND data__Identifier = '{{ bucket_name }}';
+AND Identifier = '{{ bucket_name }}';
 ```
 
 ### `base64_encode`
@@ -100,7 +100,7 @@ Escapes a string for use as a SQL string literal by doubling any single quotes. 
 
 ```sql
 INSERT INTO snowflake.sqlapi.statements (
-data__statement,
+statement,
 /* other fields... */
 )
 SELECT 
@@ -158,7 +158,7 @@ StackQL Deploy injects the following built-in variables automatically — no man
 The name of the stack as declared in `stackql_manifest.yml`.  Available in every template context.
 
 ```sql
-INSERT INTO google.compute.networks (project, data__name)
+INSERT INTO google.compute.networks (project, name)
 SELECT '{{ project }}', '{{ stack_name }}-{{ stack_env }}-vpc'
 ```
 
@@ -172,7 +172,7 @@ The name of the resource currently being processed.  Available in every resource
 
 ```sql
 /*+ create */
-INSERT INTO google.logging.sinks (parent, data__name)
+INSERT INTO google.logging.sinks (parent, name)
 SELECT 'projects/{{ project }}', '{{ resource_name }}-sink'
 ```
 
@@ -229,7 +229,7 @@ Generates a random UUID (version 4). Useful for creating unique identifiers.
 ```sql
 INSERT INTO aws.s3.buckets (
   /* fields... */
-  data__BucketName,
+  BucketName,
   /* other fields... */
 )
 SELECT

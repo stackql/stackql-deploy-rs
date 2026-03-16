@@ -8,11 +8,11 @@ AND forwardingRule = '{{ forwarding_rule_name }}'
 INSERT INTO google.compute.forwarding_rules(
   project,
   region,
-  data__name,
-  data__IPAddress,
-  data__loadBalancingScheme,
-  data__portRange,
-  data__target
+  name,
+  IPAddress,
+  loadBalancingScheme,
+  portRange,
+  target
 )
 SELECT
   '{{ project }}',

@@ -68,5 +68,5 @@ AND json_extract(tags, '$.StackEnv') = '{{ stack_env }}'
 
 /*+ delete */
 DELETE FROM aws.ec2.security_groups
-WHERE data__Identifier = '{{ security_group_id }}'
+WHERE Identifier = '{{ security_group_id }}'
 AND region = '{{ region }}';

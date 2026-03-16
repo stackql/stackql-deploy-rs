@@ -30,5 +30,5 @@ AND subnet_id = '{{ subnet_id }}';
 
 /*+ delete */
 DELETE FROM aws.ec2.subnet_route_table_associations
-WHERE data__Identifier = '{{ route_table_assn_id }}'
+WHERE Identifier = '{{ route_table_assn_id }}'
 AND region = '{{ region }}';
