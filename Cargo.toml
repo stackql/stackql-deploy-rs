@@ -1,6 +1,6 @@
 [package]
 name = "stackql-deploy"
-version = "2.0.0"
+version = "2.0.1"
 edition = "2021"
 rust-version = "1.75"
 description = "Infrastructure-as-code framework for declarative cloud resource management using StackQL"

@@ -20,7 +20,7 @@ jobs:
 
       - name: Pull github provider
         id: pull-github-provider
-        uses: stackql/stackql-exec@v2.2.3
+        uses: stackql/stackql-exec@v2
         with:
           query: |
             REGISTRY PULL github
@@ -28,7 +28,7 @@ jobs:
 
       - name: Fetch contributors
         id: get-contributors
-        uses: stackql/stackql-exec@v2.2.3
+        uses: stackql/stackql-exec@v2
         with:
           query_file_path: ci-scripts/get-contributors.iql
           query_output: csv
