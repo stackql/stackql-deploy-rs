@@ -93,7 +93,7 @@ const config = {
   favicon: 'img/favicon.ico',
   staticDirectories: ['static'],
   url: 'https://stackql-deploy.io',
-  organizationName: 'stackql-labs',
+  organizationName: 'stackql',
   projectName: 'stackql-deploy-rs',
 
   onBrokenLinks: 'warn',

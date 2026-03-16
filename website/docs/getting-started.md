@@ -60,7 +60,7 @@ Download the latest `.msi` installer from the [GitHub Releases](https://github.c
 </TabItem>
 </Tabs>
 
-For more installation options, see the [__Install__](/install) page.
+For more installation options, see the [__GitHub Releases__](https://github.com/stackql-labs/stackql-deploy-rs/releases) page.
 
 ## How `stackql-deploy` works
 

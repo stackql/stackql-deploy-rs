@@ -12,12 +12,7 @@ const sidebars = {
       id: 'index', 
       label: 'Welcome',
     },
-    {
-      type: 'doc',
-      id: 'install',
-      label: 'Install',
-    },
-    {
+{
       type: 'doc',
       id: 'getting-started',
       label: 'Getting Started',
