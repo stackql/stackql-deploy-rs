@@ -93,48 +93,37 @@ pub fn find_all_running_servers() -> Vec<RunningServer> {
     let mut running_servers = Vec::new();
 
     if cfg!(target_os = "windows") {
-        // Use WMIC to get stackql processes with their command lines and PIDs
-        let output = ProcessCommand::new("wmic")
+        // Use PowerShell Get-CimInstance to get stackql processes with command lines
+        let output = ProcessCommand::new("powershell")
             .args([
-                "process",
-                "where",
-                "name='stackql.exe'",
-                "get",
-                "ProcessId,CommandLine",
-                "/format:list",
+                "-NoProfile",
+                "-Command",
+                "Get-CimInstance Win32_Process -Filter \"Name='stackql.exe'\" | ForEach-Object { \"PID=$($_.ProcessId) CMD=$($_.CommandLine)\" }",
             ])
             .output();
 
         if let Ok(output) = output {
             let output_str = String::from_utf8_lossy(&output.stdout);
-            let mut current_cmdline = String::new();
-            let mut current_pid: Option<u32> = None;
-
             for line in output_str.lines() {
                 let line = line.trim();
-                if let Some(cmdline) = line.strip_prefix("CommandLine=") {
-                    current_cmdline = cmdline.to_string();
-                } else if let Some(pid_str) = line.strip_prefix("ProcessId=") {
-                    current_pid = pid_str.trim().parse().ok();
-                }
-
-                // When we have both values, emit a server entry
-                if let Some(pid) = current_pid {
-                    if !current_cmdline.is_empty() {
-                        if let Some(port) = extract_port_from_cmdline(&current_cmdline) {
-                            debug!(
-                                "find_all_running_servers (Windows): PID {} -> port {} (cmdline: {})",
-                                pid, port, current_cmdline
-                            );
-                            running_servers.push(RunningServer { pid, port });
+                if let Some(rest) = line.strip_prefix("PID=") {
+                    if let Some(space_pos) = rest.find(" CMD=") {
+                        let pid_str = &rest[..space_pos];
+                        let cmdline = &rest[space_pos + 5..];
+                        if let Ok(pid) = pid_str.parse::<u32>() {
+                            if let Some(port) = extract_port_from_cmdline(cmdline) {
+                                debug!(
+                                    "find_all_running_servers (Windows): PID {} -> port {}",
+                                    pid, port
+                                );
+                                running_servers.push(RunningServer { pid, port });
+                            }
                         }
-                        current_cmdline.clear();
-                        current_pid = None;
                     }
                 }
             }
         } else {
-            debug!("find_all_running_servers: wmic command failed, falling back to tasklist");
+            debug!("find_all_running_servers: PowerShell command failed");
         }
     } else {
         let output = ProcessCommand::new("pgrep")

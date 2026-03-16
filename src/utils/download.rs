@@ -152,11 +152,11 @@ fn extract_binary(
     match get_platform() {
         Platform::MacOS => {
             // For macOS, we need to use pkgutil
+            // pkgutil --expand-full requires the destination directory to NOT exist
             let unpacked_dir = dest_dir.join("stackql_unpacked");
             if unpacked_dir.exists() {
                 fs::remove_dir_all(&unpacked_dir).map_err(AppError::IoError)?;
             }
-            fs::create_dir_all(&unpacked_dir).map_err(AppError::IoError)?;
 
             let output = Command::new("pkgutil")
                 .arg("--expand-full")

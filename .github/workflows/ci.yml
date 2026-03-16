@@ -189,9 +189,6 @@ jobs:
           - os: macos-latest
             artifact-name: stackql-deploy-macos-arm64
             archive: tar.gz
-          - os: macos-13
-            artifact-name: stackql-deploy-macos-x86_64
-            archive: tar.gz
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/download-artifact@v8
