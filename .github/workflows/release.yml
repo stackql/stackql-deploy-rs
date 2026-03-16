@@ -132,9 +132,64 @@ jobs:
           path: ${{ matrix.artifact-name }}.*
           if-no-files-found: error
 
+  # Runtime smoke test on each platform before releasing
+  runtime-test:
+    name: Runtime Test (${{ matrix.os }})
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact-name: stackql-deploy-linux-x86_64
+            archive: tar.gz
+          - os: windows-latest
+            artifact-name: stackql-deploy-windows-x86_64
+            archive: zip
+          - os: macos-latest
+            artifact-name: stackql-deploy-macos-arm64
+            archive: tar.gz
+          - os: macos-13
+            artifact-name: stackql-deploy-macos-x86_64
+            archive: tar.gz
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: ${{ matrix.artifact-name }}
+      - name: Extract binary (tar.gz)
+        if: matrix.archive == 'tar.gz'
+        run: tar -xzf ${{ matrix.artifact-name }}.tar.gz
+      - name: Extract binary (zip)
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: Expand-Archive -Path ${{ matrix.artifact-name }}.zip -DestinationPath .
+      - name: Run smoke test
+        shell: bash
+        run: |
+          set -e
+
+          echo "=== Test 1: stackql-deploy info (forces stackql download) ==="
+          ./stackql-deploy info
+
+          echo ""
+          echo "=== Test 2: stackql-deploy start-server ==="
+          ./stackql-deploy start-server
+
+          echo ""
+          echo "=== Test 3: stackql-deploy info (verify server running) ==="
+          ./stackql-deploy info
+
+          echo ""
+          echo "=== Test 4: stackql-deploy stop-server ==="
+          ./stackql-deploy stop-server
+
+          echo ""
+          echo "=== All smoke tests passed ==="
+
   release:
     name: Create GitHub Release
-    needs: build
+    needs: [build, runtime-test]
     runs-on: ubuntu-latest
     permissions:
       contents: write

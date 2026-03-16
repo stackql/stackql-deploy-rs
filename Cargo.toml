@@ -1,13 +1,13 @@
 [package]
 name = "stackql-deploy"
-version = "2.0.2"
+version = "2.0.3"
 edition = "2021"
 rust-version = "1.75"
 description = "Infrastructure-as-code framework for declarative cloud resource management using StackQL"
 authors = ["StackQL Studios <info@stackql.io>"]
 license = "MIT"
 homepage = "https://stackql.io"
-repository = "https://github.com/stackql/stackql-deploy"
+repository = "https://github.com/stackql/stackql-deploy-rs"
 keywords = ["stackql", "infrastructure", "iac", "cloud", "devops"]
 categories = ["command-line-utilities", "development-tools"]
 readme = "README.md"

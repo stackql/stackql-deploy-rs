@@ -32,13 +32,37 @@ use log::debug;
 use reqwest::blocking::Client;
 use zip::ZipArchive;
 
-use crate::app::STACKQL_DOWNLOAD_URL;
+use crate::app::STACKQL_RELEASE_BASE_URL;
 use crate::error::AppError;
 use crate::utils::platform::{get_platform, Platform};
 
-/// Retrieves the URL for downloading the StackQL binary.
+/// Retrieves the URL for downloading the StackQL binary based on OS and architecture.
 pub fn get_download_url() -> Result<String, AppError> {
-    Ok(STACKQL_DOWNLOAD_URL.to_string())
+    let platform = get_platform();
+    match platform {
+        Platform::MacOS => Ok(format!(
+            "{}/stackql_darwin_multiarch.pkg",
+            STACKQL_RELEASE_BASE_URL
+        )),
+        Platform::Windows => Ok(format!(
+            "{}/stackql_windows_amd64.zip",
+            STACKQL_RELEASE_BASE_URL
+        )),
+        Platform::Linux => {
+            let arch = if cfg!(target_arch = "aarch64") {
+                "arm64"
+            } else {
+                "amd64"
+            };
+            Ok(format!(
+                "{}/stackql_linux_{}.zip",
+                STACKQL_RELEASE_BASE_URL, arch
+            ))
+        }
+        Platform::Unknown => Err(AppError::CommandFailed(
+            "Unsupported platform for stackql download".to_string(),
+        )),
+    }
 }
 
 /// Downloads the StackQL binary and extracts it to the current directory.
@@ -134,20 +158,32 @@ fn extract_binary(
             }
             fs::create_dir_all(&unpacked_dir).map_err(AppError::IoError)?;
 
-            Command::new("pkgutil")
+            let output = Command::new("pkgutil")
                 .arg("--expand-full")
                 .arg(archive_path)
                 .arg(&unpacked_dir)
                 .output()
                 .map_err(|e| AppError::CommandFailed(format!("Failed to extract pkg: {}", e)))?;
 
-            let extracted_binary = unpacked_dir
-                .join("payload")
-                .join("usr")
-                .join("local")
-                .join("bin")
-                .join("stackql");
-            fs::copy(extracted_binary, &binary_path).map_err(AppError::IoError)?;
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                return Err(AppError::CommandFailed(format!(
+                    "pkgutil failed: {}",
+                    stderr
+                )));
+            }
+
+            // Search for the stackql binary in the expanded pkg
+            // The structure can vary: payload/usr/local/bin/stackql or
+            // <subpkg>.pkg/payload/usr/local/bin/stackql
+            let extracted_binary =
+                find_file_recursive(&unpacked_dir, "stackql").ok_or_else(|| {
+                    AppError::CommandFailed(
+                        "Could not find stackql binary in extracted pkg".to_string(),
+                    )
+                })?;
+
+            fs::copy(&extracted_binary, &binary_path).map_err(AppError::IoError)?;
 
             // Clean up
             fs::remove_dir_all(unpacked_dir).ok();
@@ -195,4 +231,21 @@ fn extract_binary(
     }
 
     Ok(binary_path)
+}
+
+/// Recursively search for a file by name in a directory tree.
+/// Returns the first match that is a regular file (not a directory).
+fn find_file_recursive(dir: &Path, target_name: &str) -> Option<PathBuf> {
+    let entries = fs::read_dir(dir).ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if let Some(found) = find_file_recursive(&path, target_name) {
+                return Some(found);
+            }
+        } else if path.file_name().and_then(|n| n.to_str()) == Some(target_name) {
+            return Some(path);
+        }
+    }
+    None
 }

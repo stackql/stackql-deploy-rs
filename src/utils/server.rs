@@ -93,20 +93,48 @@ pub fn find_all_running_servers() -> Vec<RunningServer> {
     let mut running_servers = Vec::new();
 
     if cfg!(target_os = "windows") {
-        let output = ProcessCommand::new("tasklist")
-            .output()
-            .unwrap_or_else(|_| panic!("Failed to execute tasklist"));
+        // Use WMIC to get stackql processes with their command lines and PIDs
+        let output = ProcessCommand::new("wmic")
+            .args([
+                "process",
+                "where",
+                "name='stackql.exe'",
+                "get",
+                "ProcessId,CommandLine",
+                "/format:list",
+            ])
+            .output();
 
-        let output_str = String::from_utf8_lossy(&output.stdout);
+        if let Ok(output) = output {
+            let output_str = String::from_utf8_lossy(&output.stdout);
+            let mut current_cmdline = String::new();
+            let mut current_pid: Option<u32> = None;
 
-        for line in output_str.lines() {
-            if line.contains("stackql") {
-                if let Some(port) = extract_port_from_windows_tasklist(line) {
-                    if let Some(pid) = extract_pid_from_windows_tasklist(line) {
-                        running_servers.push(RunningServer { pid, port });
+            for line in output_str.lines() {
+                let line = line.trim();
+                if let Some(cmdline) = line.strip_prefix("CommandLine=") {
+                    current_cmdline = cmdline.to_string();
+                } else if let Some(pid_str) = line.strip_prefix("ProcessId=") {
+                    current_pid = pid_str.trim().parse().ok();
+                }
+
+                // When we have both values, emit a server entry
+                if let Some(pid) = current_pid {
+                    if !current_cmdline.is_empty() {
+                        if let Some(port) = extract_port_from_cmdline(&current_cmdline) {
+                            debug!(
+                                "find_all_running_servers (Windows): PID {} -> port {} (cmdline: {})",
+                                pid, port, current_cmdline
+                            );
+                            running_servers.push(RunningServer { pid, port });
+                        }
+                        current_cmdline.clear();
+                        current_pid = None;
                     }
                 }
             }
+        } else {
+            debug!("find_all_running_servers: wmic command failed, falling back to tasklist");
         }
     } else {
         let output = ProcessCommand::new("pgrep")
@@ -196,48 +224,33 @@ fn extract_port_from_ps(pid: &str) -> Option<u16> {
     None
 }
 
-/// Extract PID from process information on Windows
-fn extract_pid_from_windows_tasklist(line: &str) -> Option<u32> {
-    line.split_whitespace()
-        .filter_map(|s| s.parse::<u32>().ok())
-        .next()
-}
-
-/// Extract port from process information on Windows
-fn extract_port_from_windows_tasklist(line: &str) -> Option<u16> {
-    if let Some(port_str) = line.split_whitespace().find(|&s| s.parse::<u16>().is_ok()) {
-        port_str.parse().ok()
-    } else {
-        None
+/// Extract port from a command line string by looking for --pgsrv.port argument
+fn extract_port_from_cmdline(cmdline: &str) -> Option<u16> {
+    // Try --pgsrv.port=PORT format
+    if let Some(pos) = cmdline.find("--pgsrv.port=") {
+        let after = &cmdline[pos + "--pgsrv.port=".len()..];
+        let port_str: String = after.chars().take_while(|c| c.is_ascii_digit()).collect();
+        if let Ok(port) = port_str.parse::<u16>() {
+            return Some(port);
+        }
     }
+    // Try --pgsrv.port PORT format
+    if let Some(pos) = cmdline.find("--pgsrv.port") {
+        let after = &cmdline[pos + "--pgsrv.port".len()..];
+        let trimmed = after.trim_start();
+        let port_str: String = trimmed.chars().take_while(|c| c.is_ascii_digit()).collect();
+        if let Ok(port) = port_str.parse::<u16>() {
+            return Some(port);
+        }
+    }
+    None
 }
 
 /// Get the PID of the running stackql server on a specific port
 pub fn get_server_pid(port: u16) -> Option<u32> {
-    let patterns = [
-        format!("stackql.*--pgsrv.port={}", port),
-        format!("stackql.*--pgsrv.port {}", port),
-        format!("stackql.*pgsrv.port={}", port),
-        format!("stackql.*pgsrv.port {}", port),
-    ];
-
-    for pattern in &patterns {
-        let output = ProcessCommand::new("pgrep")
-            .arg("-f")
-            .arg(pattern)
-            .output()
-            .ok()?;
-
-        if !output.stdout.is_empty() {
-            let stdout_content = String::from_utf8_lossy(&output.stdout);
-            let pid_str = stdout_content.trim();
-            if let Ok(pid) = pid_str.parse::<u32>() {
-                return Some(pid);
-            }
-        }
-    }
-
-    None
+    // Use find_all_running_servers which handles platform differences
+    let servers = find_all_running_servers();
+    servers.iter().find(|s| s.port == port).map(|s| s.pid)
 }
 
 /// Start the stackql server with the given options

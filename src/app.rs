@@ -71,24 +71,8 @@ pub const STACKQL_BINARY_NAME: &str = "stackql.exe";
 #[cfg(not(target_os = "windows"))]
 pub const STACKQL_BINARY_NAME: &str = "stackql";
 
-/// StackQL download URLs by platform
-#[cfg_attr(
-    target_os = "windows",
-    doc = "StackQL download URL (platform dependent)"
-)]
-#[cfg(target_os = "windows")]
-pub const STACKQL_DOWNLOAD_URL: &str =
-    "https://releases.stackql.io/stackql/latest/stackql_windows_amd64.zip";
-
-#[cfg_attr(target_os = "linux", doc = "StackQL download URL (platform dependent)")]
-#[cfg(target_os = "linux")]
-pub const STACKQL_DOWNLOAD_URL: &str =
-    "https://releases.stackql.io/stackql/latest/stackql_linux_amd64.zip";
-
-#[cfg_attr(target_os = "macos", doc = "StackQL download URL (platform dependent)")]
-#[cfg(target_os = "macos")]
-pub const STACKQL_DOWNLOAD_URL: &str =
-    "https://storage.googleapis.com/stackql-public-releases/latest/stackql_darwin_multiarch.pkg";
+/// Base URL for StackQL releases
+pub const STACKQL_RELEASE_BASE_URL: &str = "https://releases.stackql.io/stackql/latest";
 
 /// Commands exempt from binary check
 pub const EXEMPT_COMMANDS: [&str; 1] = ["init"];
