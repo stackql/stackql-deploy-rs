@@ -42,7 +42,7 @@ jobs:
         run: echo "${{ steps.get-contributors.outputs.stackql-query-results }}" > contributors.csv
 
       - name: Upload contributors artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: contributors-csv
           path: contributors.csv
@@ -91,7 +91,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download contributors CSV
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: contributors-csv
 
@@ -138,7 +138,7 @@ jobs:
             -DestinationPath ${{ matrix.artifact-name }}.zip
 
       - name: Upload binary artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact-name }}
           path: ${{ matrix.artifact-name }}.*
