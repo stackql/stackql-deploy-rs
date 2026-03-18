@@ -4,7 +4,7 @@ Based upon the [Kubernetes the Hard Way](https://github.com/kelseyhightower/kube
 
 ## about `stackql-deploy`
 
-[`stackql-deploy`](https://pypi.org/project/stackql-deploy/) is a multi cloud deployment automation and testing framework which is an alternative to Terraform or similar IaC tools.  `stackql-deploy` uses a declarative model/ELT based approach to cloud resource deployment (inspired by [`dbt`](https://www.getdbt.com/)).  Advantages of `stackql-deploy` include:
+[`stackql-deploy`](https://crates.io/crates/stackql-deploy) is a multi cloud deployment automation and testing framework which is an alternative to Terraform or similar IaC tools.  `stackql-deploy` uses a declarative model/ELT based approach to cloud resource deployment (inspired by [`dbt`](https://www.getdbt.com/)).  Advantages of `stackql-deploy` include:
 
 - declarative framework
 - no state file (state is determined from the target environment)

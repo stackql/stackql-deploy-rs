@@ -1,6 +1,5 @@
 /*+ exports, retries=5, retry_delay=10 */
-SELECT public_dns_name,
-public_dns_name as web_server_url
+SELECT public_dns_name
 FROM awscc.ec2.instances
 WHERE Identifier = '{{ instance_id }}'
 AND region = '{{ region }}';

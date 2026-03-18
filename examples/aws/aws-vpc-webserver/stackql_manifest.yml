@@ -75,6 +75,8 @@ resources:
       - route_table_id
   - name: example_subnet_rt_assn
     props: []
+    exports:
+      - subnet_route_table_assn_id
   - name: example_inet_route
     props: []
   - name: example_security_group
@@ -101,13 +103,16 @@ resources:
             FromPort: 22
             ToPort: 22
       - name: security_group_egress
-        value: '[{"IpProtocol":"-1","CidrIp":"0.0.0.0/0","Description":"Allow all outbound traffic"}]'
+        value:
+        - CidrIp: "0.0.0.0/0"
+          Description: "Allow all outbound traffic"
+          FromPort: -1
+          ToPort: -1
+          IpProtocol: "-1"
     exports:
       - security_group_id
   - name: example_web_server
     props:
-      - name: instance_name
-        value: "{{ stack_name }}-{{ stack_env }}-instance"
       - name: ami_id
         value: ami-05024c2628f651b80
       - name: instance_type
@@ -125,7 +130,7 @@ resources:
           systemctl start httpd
           systemctl enable httpd
           echo '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>StackQL on AWS</title><style>body {font-family: Tahoma, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #f0f0f0; text-align: center;} img {height: auto;} code {background-color: #e8e8e8; padding: 2px 6px; border-radius: 3px; font-weight: bold;} p {font-size: 1.5em; font-weight: bold;}</style></head>' > /var/www/html/index.html
-          echo '<body><div><a href="https://github.com/stackql/stackql"><img src="https://stackql.io/img/stackql-logo-bold.png" alt="StackQL Logo"></a><p>Hello, <a href="https://pypi.org/project/stackql-deploy/"><code>stackql-deploy</code></a> on AWS!</p></div></body></html>' >> /var/www/html/index.html
+          echo '<body><div><a href="https://github.com/stackql/stackql"><img src="https://stackql.io/img/stackql-logo-bold.png" alt="StackQL Logo"></a><p>Hello, <a href="https://crates.io/crates/stackql-deploy"><code>stackql-deploy</code></a> on AWS!</p></div></body></html>' >> /var/www/html/index.html
       - name: instance_tags
         value:
           - Key: Name
@@ -138,4 +143,3 @@ resources:
     props: []
     exports:
       - public_dns_name
-      - web_server_url

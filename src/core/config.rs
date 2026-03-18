@@ -13,6 +13,8 @@ use log::{debug, error};
 use serde_json::Value as JsonValue;
 use serde_yaml::Value as YamlValue;
 
+use crate::core::utils::catch_error_and_exit;
+
 use crate::resource::manifest::{Manifest, Property};
 use crate::template::engine::TemplateEngine;
 
@@ -81,26 +83,44 @@ pub fn render_value(
                     _ => format!("{:?}", k),
                 };
                 let rendered = render_value(engine, v, context);
-                // Try to parse as JSON value, otherwise use as string
-                match serde_json::from_str::<JsonValue>(&rendered) {
-                    Ok(json_val) => {
-                        rendered_map.insert(key, json_val);
+                // Preserve the original YAML type: if the source value was a
+                // YAML string, keep it as a JSON string even if its content
+                // looks like a number (e.g. "-1").  Only attempt JSON
+                // re-parsing for values that were originally complex types
+                // (mappings, sequences) or template expressions.
+                let json_val = if matches!(v, YamlValue::String(_))
+                    && !rendered.starts_with('{')
+                    && !rendered.starts_with('[')
+                {
+                    JsonValue::String(rendered)
+                } else {
+                    match serde_json::from_str::<JsonValue>(&rendered) {
+                        Ok(jv) => jv,
+                        Err(_) => JsonValue::String(rendered),
                     }
-                    Err(_) => {
-                        rendered_map.insert(key, JsonValue::String(rendered));
-                    }
-                }
+                };
+                rendered_map.insert(key, json_val);
             }
             serde_json::to_string(&JsonValue::Object(rendered_map)).unwrap_or_default()
         }
         YamlValue::Sequence(seq) => {
             let mut rendered_items = Vec::new();
-            for item in seq {
+            for (idx, item) in seq.iter().enumerate() {
                 let rendered = render_value(engine, item, context);
-                match serde_json::from_str::<JsonValue>(&rendered) {
-                    Ok(json_val) => rendered_items.push(json_val),
-                    Err(_) => rendered_items.push(JsonValue::String(rendered)),
-                }
+                // Same type-preservation logic for sequence items.
+                let _ = idx;
+                let json_val = if matches!(item, YamlValue::String(_))
+                    && !rendered.starts_with('{')
+                    && !rendered.starts_with('[')
+                {
+                    JsonValue::String(rendered)
+                } else {
+                    match serde_json::from_str::<JsonValue>(&rendered) {
+                        Ok(jv) => jv,
+                        Err(_) => JsonValue::String(rendered),
+                    }
+                };
+                rendered_items.push(json_val);
             }
             serde_json::to_string(&rendered_items).unwrap_or_default()
         }
@@ -399,13 +419,10 @@ pub fn get_resource_type(resource: &crate::resource::manifest::Resource) -> &str
     let res_type = resource.r#type.as_str();
     match res_type {
         "resource" | "query" | "script" | "multi" | "command" => res_type,
-        _ => {
-            error!(
-                "Resource type must be 'resource', 'script', 'multi', 'query', or 'command', got '{}'",
-                res_type
-            );
-            process::exit(1);
-        }
+        _ => catch_error_and_exit(&format!(
+            "Resource type must be 'resource', 'script', 'multi', 'query', or 'command', got '{}'",
+            res_type
+        )),
     }
 }
 
@@ -437,6 +454,7 @@ mod tests {
             r#if: None,
             skip_validation: None,
             auth: None,
+            return_vals: None,
         }
     }
 

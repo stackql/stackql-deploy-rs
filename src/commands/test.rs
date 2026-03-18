@@ -21,7 +21,7 @@ use crate::core::config::get_resource_type;
 use crate::core::utils::catch_error_and_exit;
 use crate::utils::connection::create_client;
 use crate::utils::display::{print_unicode_box, BorderColor};
-use crate::utils::server::check_and_start_server;
+use crate::utils::server::{check_and_start_server, stop_local_server};
 
 /// Configures the `test` command for the CLI application.
 pub fn command() -> Command {
@@ -90,6 +90,8 @@ pub fn execute(matches: &ArgMatches) {
     );
 
     println!("tests complete (dry run: {})", is_dry_run);
+
+    stop_local_server();
 }
 
 /// Main test workflow matching Python's StackQLTestRunner.run().
@@ -129,7 +131,7 @@ fn run_test(
             catch_error_and_exit(&format!("unknown resource type: {}", res_type));
         }
 
-        let full_context = runner.get_full_context(resource);
+        let mut full_context = runner.get_full_context(resource);
 
         // Get test queries (templates only, not yet rendered)
         let (test_queries, inline_query) =
@@ -140,7 +142,39 @@ fn run_test(
                 (runner.get_queries(resource, &full_context), None)
             };
 
-        // Render statecheck JIT if present
+        // Run the exists query first if present to capture this.* fields
+        // (e.g. identifier) before rendering statecheck/exports.
+        let mut exists_is_statecheck = false;
+        if let Some(eq) = test_queries.get("exists") {
+            let rendered =
+                runner.render_query(&resource.name, "exists", &eq.template, &full_context);
+            let (exists, fields) = runner.check_if_resource_exists(
+                resource,
+                &rendered,
+                eq.options.retries,
+                eq.options.retry_delay,
+                dry_run,
+                show_queries,
+                false,
+            );
+            let has_fields = fields.is_some();
+            if let Some(ref f) = fields {
+                for (k, v) in f {
+                    full_context.insert(format!("{}.{}", resource.name, k), v.clone());
+                }
+            }
+            // If exists exports a variable and there is no statecheck or
+            // exports query, the exists query IS the statecheck.
+            if exists
+                && has_fields
+                && !test_queries.contains_key("statecheck")
+                && !test_queries.contains_key("exports")
+            {
+                exists_is_statecheck = true;
+            }
+        }
+
+        // Render statecheck JIT (after exists fields are available)
         let statecheck_rendered = test_queries.get("statecheck").map(|q| {
             let rendered =
                 runner.render_query(&resource.name, "statecheck", &q.template, &full_context);
@@ -153,7 +187,7 @@ fn run_test(
             .get("statecheck")
             .map_or(0, |q| q.options.retry_delay);
 
-        // Render exports JIT if present
+        // Render exports JIT (after exists fields are available)
         let mut exports_query_str = test_queries
             .get("exports")
             .map(|q| runner.render_query(&resource.name, "exports", &q.template, &full_context));
@@ -205,6 +239,14 @@ fn run_test(
                 );
                 is_correct_state = state;
                 exports_result_from_proxy = proxy;
+            } else if exists_is_statecheck {
+                // Exists query exported a variable and there is no statecheck
+                // or exports; the successful exists check confirms the state.
+                info!(
+                    "exists query with captured fields confirms state for [{}]",
+                    resource.name
+                );
+                is_correct_state = true;
             } else {
                 catch_error_and_exit(
                     "iql file must include either 'statecheck' or 'exports' anchor for validation.",

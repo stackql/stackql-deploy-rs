@@ -6,7 +6,7 @@ see the following links for more information on `stackql`, `stackql-deploy` and 
 
 - [`snowflake` provider docs](https://stackql.io/registry/snowflake)
 - [`stackql`](https://github.com/stackql/stackql)
-- [`stackql-deploy` PyPI home page](https://pypi.org/project/stackql-deploy/)
+- [`stackql-deploy` on crates.io](https://crates.io/crates/stackql-deploy)
 - [`stackql-deploy` GitHub repo](https://github.com/stackql/stackql-deploy)
 
 ## Overview

@@ -353,6 +353,39 @@ pub fn render_query(
     }
 }
 
+/// Try to render a query template, returning None if variables are missing.
+/// Used for deferred rendering where this.* fields may not yet be available.
+pub fn try_render_query(
+    engine: &TemplateEngine,
+    res_name: &str,
+    anchor: &str,
+    template: &str,
+    context: &HashMap<String, String>,
+) -> Option<String> {
+    let temp_context = prepare_query_context(context);
+
+    let expanded = match preprocess_this_prefix(template, res_name) {
+        Ok(t) => t,
+        Err(_) => return None,
+    };
+
+    let mut ctx = temp_context;
+    let compat_query = preprocess_jinja2_compat(&expanded);
+    let processed_query = preprocess_inline_dicts(&compat_query, &mut ctx);
+
+    let template_name = format!("{}__{}", res_name, anchor);
+    match engine.render_with_filters(&template_name, &processed_query, &ctx) {
+        Ok(rendered) => {
+            debug!(
+                "[{}] [{}] rendered query:\n\n{}\n",
+                res_name, anchor, rendered
+            );
+            Some(rendered)
+        }
+        Err(_) => None,
+    }
+}
+
 /// Get queries for a resource: load from file, parse anchors.
 /// Templates are NOT rendered here — rendering is deferred to when
 /// each query is actually needed (JIT rendering).

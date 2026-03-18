@@ -1,0 +1,34 @@
+version: 1
+name: "patch-doc-test"
+description: Demonstrates the Cloud Control API update (PatchDocument) workflow using an S3 bucket - deploy, modify versioning config, re-deploy to apply the update.
+providers:
+  - awscc
+globals:
+  - name: region
+    description: aws region
+    value: "{{ AWS_REGION }}"
+  - name: global_tags
+    value:
+      - Key: 'stackql:stack-name'
+        Value: "{{ stack_name }}"
+      - Key: 'stackql:stack-env'
+        Value: "{{ stack_env }}"
+      - Key: 'stackql:resource-name'
+        Value: "{{ resource_name }}"
+resources:
+  - name: bucket1
+    props:
+      - name: bucket1_name
+        value: "{{ stack_name }}-{{ stack_env }}-bucket1"
+      - name: bucket1_versioning_config
+        value:
+          Status: Enabled
+      - name: bucket1_tags
+        merge:
+          - global_tags
+        value:
+          - Key: Name
+            Value: "{{ stack_name }}-{{ stack_env }}-bucket1"
+    exports:
+      - bucket1_name
+      - bucket1_arn

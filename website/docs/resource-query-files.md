@@ -58,36 +58,51 @@ This pattern is particularly useful when you need to **discover a resource ident
 
 ```sql
 /*+ exists */
-SELECT split_part(ResourceARN, '/', 2) as identifier
-FROM awscc.tagging.tagged_resources
-WHERE region = '{{ region }}'
-AND TagFilters = '[{"Key":"stackql:stack-name","Values":["{{ stack_name }}"]},{"Key":"stackql:stack-env","Values":["{{ stack_env }}"]},{"Key":"stackql:resource-name","Values":["example_vpc"]}]'
-AND ResourceTypeFilters = '["ec2:vpc"]'
+WITH tagged_resources AS
+(
+    SELECT split_part(ResourceARN, '/', 2) as vpc_id
+    FROM awscc.tagging.tagged_resources
+    WHERE region = '{{ region }}'
+    AND TagFilters = '{{ global_tags | to_aws_tag_filters }}'
+    AND ResourceTypeFilters = '["ec2:vpc"]'
+),
+vpcs AS
+(
+    SELECT vpc_id
+    FROM awscc.ec2.vpcs_list_only
+    WHERE region = '{{ region }}'
+)
+SELECT r.vpc_id
+FROM vpcs r
+INNER JOIN tagged_resources tr
+ON r.vpc_id = tr.vpc_id;
 ```
 
-In the example above, when the resource exists the `identifier` field (e.g. `vpc-0abc123def456`) is captured and available as `{{ this.identifier }}` in subsequent queries:
+In the example above, when the resource exists the `vpc_id` field (e.g. `vpc-0abc123def456`) is captured and available as `{{ this.vpc_id }}` in subsequent queries:
 
 ```sql
 /*+ statecheck, retries=5, retry_delay=5 */
 SELECT COUNT(*) as count FROM
 (
-SELECT vpc_id, cidr_block
+SELECT
+AWS_POLICY_EQUAL(tags, '{{ vpc_tags }}') as test_tags
 FROM awscc.ec2.vpcs
-WHERE Identifier = '{{ this.identifier }}'
+WHERE Identifier = '{{ this.vpc_id }}'
 AND region = '{{ region }}'
+AND cidr_block = '{{ vpc_cidr_block }}'
 ) t
-WHERE cidr_block = '{{ vpc_cidr_block }}'
+WHERE test_tags = 1;
 ```
 
 :::tip
 
 The identifier capture pattern enables a powerful two-step workflow for providers like `awscc` (AWS Cloud Control) where resources are identified by tags rather than names:
 
-1. **`exists`** — find the resource via a tag-based lookup (e.g. `awscc.tagging.tagged_resources`), capturing the cloud-assigned identifier
-2. **`statecheck`** — use `{{ this.identifier }}` to query the resource directly and verify its properties match the desired state
-3. **`exports`** — use `{{ this.identifier }}` to query the resource and extract values for downstream resources
+1. **`exists`** — find the resource via a CTE that cross-references `awscc.tagging.tagged_resources` with the provider's `*_list_only` resource, capturing the cloud-assigned identifier.  The `INNER JOIN` ensures the resource both has the expected tags **and** currently exists (eliminating stale tag records for terminated resources).
+2. **`statecheck`** — use `{{ this.<field> }}` to query the resource directly and verify its properties match the desired state (including tag comparison via `AWS_POLICY_EQUAL`).
+3. **`exports`** — use `{{ this.<field> }}` to query the resource and extract values for downstream resources.
 
-This avoids the need for complex JOINs or subqueries between the tagging service and the resource provider.
+The [`to_aws_tag_filters`](template-filters#to_aws_tag_filters) filter converts the `global_tags` manifest variable into the AWS TagFilters format automatically.
 
 :::
 
@@ -494,28 +509,43 @@ The corresponding manifest entry requires **no** `callback` section — callback
 
 ### Tag-based identifier discovery example (`awscc`)
 
-This example demonstrates the **identifier capture** pattern for AWS Cloud Control (`awscc`) resources, where resources are discovered via the `awscc.tagging.tagged_resources` service.  The `exists` query returns the resource identifier (extracted from the ARN), which is then used in `statecheck` and `exports` queries via `{{ this.identifier }}`.
+This example demonstrates the **identifier capture** pattern for AWS Cloud Control (`awscc`) resources.  Resources are discovered using a CTE that cross-references `awscc.tagging.tagged_resources` with the provider's `*_list_only` resource, ensuring the resource actually exists (not just a stale tag record).  The captured field is then used via `{{ this.<field> }}` in `statecheck` and `exports` queries.
 
 <File name='example_subnet.iql'>
 
 ```sql
 /*+ exists */
-SELECT split_part(ResourceARN, '/', 2) as identifier
-FROM awscc.tagging.tagged_resources
-WHERE region = '{{ region }}'
-AND TagFilters = '[{"Key":"stackql:stack-name","Values":["{{ stack_name }}"]},{"Key":"stackql:stack-env","Values":["{{ stack_env }}"]},{"Key":"stackql:resource-name","Values":["example_subnet"]}]'
-AND ResourceTypeFilters = '["ec2:subnet"]'
+WITH tagged_resources AS
+(
+    SELECT split_part(ResourceARN, '/', 2) as subnet_id
+    FROM awscc.tagging.tagged_resources
+    WHERE region = '{{ region }}'
+    AND TagFilters = '{{ global_tags | to_aws_tag_filters }}'
+    AND ResourceTypeFilters = '["ec2:subnet"]'
+),
+subnets AS
+(
+    SELECT subnet_id
+    FROM awscc.ec2.subnets_list_only
+    WHERE region = '{{ region }}'
+)
+SELECT r.subnet_id
+FROM subnets r
+INNER JOIN tagged_resources tr
+ON r.subnet_id = tr.subnet_id;
 
 /*+ statecheck, retries=5, retry_delay=5 */
 SELECT COUNT(*) as count FROM
 (
-SELECT subnet_id, vpc_id, cidr_block
+SELECT
+AWS_POLICY_EQUAL(tags, '{{ subnet_tags }}') as test_tags
 FROM awscc.ec2.subnets
-WHERE Identifier = '{{ this.identifier }}'
+WHERE Identifier = '{{ this.subnet_id }}'
 AND region = '{{ region }}'
-) t
-WHERE cidr_block = '{{ subnet_cidr_block }}'
+AND cidr_block = '{{ subnet_cidr_block }}'
 AND vpc_id = '{{ vpc_id }}'
+) t
+WHERE test_tags = 1;
 
 /*+ create */
 INSERT INTO awscc.ec2.subnets (
@@ -524,28 +554,29 @@ INSERT INTO awscc.ec2.subnets (
 SELECT
  '{{ vpc_id }}', '{{ subnet_cidr_block }}', true,
  '{{ subnet_tags }}', '{{ region }}'
+RETURNING *;
 
 /*+ exports, retries=5, retry_delay=5 */
 SELECT subnet_id, availability_zone
 FROM awscc.ec2.subnets
-WHERE Identifier = '{{ this.identifier }}'
-AND region = '{{ region }}'
+WHERE Identifier = '{{ this.subnet_id }}'
+AND region = '{{ region }}';
 
 /*+ delete */
 DELETE FROM awscc.ec2.subnets
-WHERE data__Identifier = '{{ subnet_id }}'
-AND region = '{{ region }}'
+WHERE Identifier = '{{ subnet_id }}'
+AND region = '{{ region }}';
 ```
 
 </File>
 
 In this example:
 
-1. **`exists`** — queries `awscc.tagging.tagged_resources` filtered by stack-level tags and resource type.  If a matching resource is found, `identifier` is captured (e.g. `subnet-0abc123...`).
-2. **`statecheck`** — uses `{{ this.identifier }}` to query `awscc.ec2.subnets` directly and verify the CIDR block and VPC ID match the desired state.
-3. **`create`** — standard `INSERT` with tags that include `stackql:stack-name`, `stackql:stack-env`, and `stackql:resource-name` for future discovery.
-4. **`exports`** — uses `{{ this.identifier }}` to query the resource and extract `subnet_id` and `availability_zone` for downstream resources.
-5. **`delete`** — uses the exported `subnet_id` (from the `exports` query, not `this.identifier`) with `data__Identifier`.
+1. **`exists`** — uses a CTE to cross-reference `awscc.tagging.tagged_resources` (filtered by stack tags via the [`to_aws_tag_filters`](template-filters#to_aws_tag_filters) filter) with `awscc.ec2.subnets_list_only`.  The `INNER JOIN` ensures the resource both has the expected tags **and** currently exists in the provider.  The returned `subnet_id` is captured as `{{ this.subnet_id }}`.
+2. **`statecheck`** — uses `{{ this.subnet_id }}` to query `awscc.ec2.subnets` directly and verify properties including tags (via [`AWS_POLICY_EQUAL`](https://stackql.io/docs/language-spec/functions/json/aws_policy_equal)).
+3. **`create`** — `INSERT` with `RETURNING *` to capture the Cloud Control API response.  Tags include `stackql:stack-name`, `stackql:stack-env`, and `stackql:resource-name` for future discovery.
+4. **`exports`** — uses `{{ this.subnet_id }}` to query the resource and extract `subnet_id` and `availability_zone` for downstream resources.
+5. **`delete`** — uses the exported `subnet_id` (from the `exports` query) with `Identifier`.
 
 ### `query` type example
 

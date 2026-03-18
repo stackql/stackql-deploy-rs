@@ -6,7 +6,9 @@ stackql*.zip
 stackql*.pkg
 stackql_history.txt
 stackql.log
+stackql-zip
 .env
 nohup.out
 contributors.csv
 .claude/
+nohup.out

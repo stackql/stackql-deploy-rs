@@ -106,6 +106,7 @@ mod tests {
                     r#if: None,
                     skip_validation: None,
                     auth: None,
+                    return_vals: None,
                 })
                 .collect(),
             exports: vec![],

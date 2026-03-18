@@ -257,7 +257,7 @@ jobs:
 
             If you are currently using the Python package on PyPI, please migrate to this
             release. The Python package is now deprecated and will no longer receive updates:
-            https://pypi.org/project/stackql-deploy/
+            https://crates.io/crates/stackql-deploy
 
             The CLI interface is fully compatible — existing `stackql_manifest.yml` files and
             project layouts work without modification.

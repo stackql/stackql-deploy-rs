@@ -1,0 +1,50 @@
+/*+ exists */
+SELECT COUNT(*) as count
+FROM awscc.s3.buckets_list_only
+WHERE region = '{{ region }}'
+AND bucket_name = '{{ bucket1_name }}';
+
+/*+ create */
+INSERT INTO awscc.s3.buckets (
+ BucketName,
+ VersioningConfiguration,
+ Tags,
+ region
+)
+SELECT
+ '{{ bucket1_name }}',
+ '{{ bucket1_versioning_config }}',
+ '{{ bucket1_tags }}',
+ '{{ region }}'
+RETURNING *;
+
+/*+ statecheck, retries=3, retry_delay=5 */
+SELECT COUNT(*) as count FROM
+(
+SELECT
+JSON_EQUAL(versioning_configuration, '{{ bucket1_versioning_config }}') as test_versioning_config
+FROM awscc.s3.buckets
+WHERE Identifier = '{{ bucket1_name }}'
+AND region = '{{ region }}'
+) t
+WHERE test_versioning_config = 1;
+
+/*+ update */
+UPDATE awscc.s3.buckets
+SET PatchDocument = string('{{ {
+    "VersioningConfiguration": bucket1_versioning_config,
+    "Tags": bucket1_tags
+    } | generate_patch_document }}')
+WHERE Identifier = '{{ bucket1_name }}'
+AND region = '{{ region }}';
+
+/*+ exports, retries=3, retry_delay=5 */
+SELECT bucket_name as bucket1_name, arn as bucket1_arn
+FROM awscc.s3.buckets
+WHERE Identifier = '{{ bucket1_name }}'
+AND region = '{{ region }}';
+
+/*+ delete */
+DELETE FROM awscc.s3.buckets
+WHERE Identifier = '{{ bucket1_name }}'
+AND region = '{{ region }}';

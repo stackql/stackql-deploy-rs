@@ -143,6 +143,42 @@ See [Resource Query Files - callback](resource-query-files#callback) for the ful
 
 ***
 
+### <span className="docFieldHeading">`resource.return_vals`</span>
+
+Specifies which fields from a `RETURNING *` response should be captured as resource-scoped variables (`this.*`).  This is optional — if omitted, `RETURNING *` results are still logged and stored for callback queries, but no fields are injected into the template context.
+
+`return_vals` is scoped per operation (`create`, `update`, `delete`).  Each operation maps to a list of field specifications:
+
+- **Rename pattern** — `SourceField: target_name` captures `SourceField` from the response and makes it available as `{{ this.target_name }}`
+- **Direct capture** — `FieldName` (string) captures the field as `{{ this.FieldName }}`
+
+Fields captured by `return_vals` are mutable — a `create` can set a value that a subsequent `update` overwrites.
+
+If `return_vals` is specified for a resource and operation but the field is not present in the `RETURNING *` response (either because the provider didn't return it or the `RETURNING *` clause was omitted), the build will fail.
+
+```yaml
+resources:
+  - name: example_vpc
+    props:
+      # ...
+    return_vals:
+      create:
+        - Identifier: identifier
+        - ErrorCode
+    exports:
+      - vpc_id
+```
+
+In this example, when a `create` operation runs:
+
+1. `Identifier` from the `RETURNING *` response is captured as `{{ this.identifier }}`
+2. `ErrorCode` is captured as `{{ this.ErrorCode }}`
+3. If the `RETURNING *` response doesn't include these fields, the build fails
+
+When `return_vals` successfully captures an identifier from `RETURNING *`, the framework skips the post-create `exists` re-run (saving an API call), since the identifier is already known.
+
+***
+
 ### <span className="docFieldHeading">`resource.props`</span>
 
 <ManifestFields.ResourceProps />

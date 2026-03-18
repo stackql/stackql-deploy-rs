@@ -2,8 +2,7 @@
 SELECT count(*) as count
 FROM awscc.iam.roles
 WHERE region = 'us-east-1' AND
-Identifier = '{{ role_name }}'
-;
+Identifier = '{{ role_name }}';
 
 /*+ create */
 INSERT INTO awscc.iam.roles (

@@ -2,8 +2,7 @@
 SELECT count(*) as count
 FROM databricks_account.provisioning.storage
 WHERE account_id = '{{ account_id }}'
-AND storage_configuration_name = '{{ storage_configuration_name }}'
-;
+AND storage_configuration_name = '{{ storage_configuration_name }}';
 
 /*+ create */
 INSERT INTO databricks_account.provisioning.storage (
@@ -26,5 +25,4 @@ AND JSON_EXTRACT(root_bucket_info, '$.bucket_name') = '{{ root_bucket_info | fro
 /*+ delete */
 DELETE FROM databricks_account.provisioning.storage
 WHERE account_id = '{{ account_id }}'
-AND storage_configuration_id = '{{ storage_configuration_id }}'
-;
+AND storage_configuration_id = '{{ storage_configuration_id }}';

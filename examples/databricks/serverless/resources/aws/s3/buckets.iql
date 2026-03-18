@@ -2,8 +2,7 @@
 SELECT count(*) as count
 FROM awscc.s3.buckets
 WHERE region = '{{ region }}' AND
-Identifier = '{{ bucket_name }}'
-;
+Identifier = '{{ bucket_name }}';
 
 /*+ create */
 INSERT INTO awscc.s3.buckets (

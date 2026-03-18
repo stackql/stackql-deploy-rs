@@ -19,6 +19,8 @@ use crate::utils::query::{execute_query, QueryResult};
 /// Exit with error message. Matches Python's `catch_error_and_exit`.
 pub fn catch_error_and_exit(msg: &str) -> ! {
     error!("{}", msg);
+    // Stop the local server before exiting to avoid stale sessions
+    crate::utils::server::stop_local_server();
     eprintln!("stackql-deploy operation failed");
     process::exit(1);
 }
@@ -64,7 +66,7 @@ pub fn run_stackql_query(
                     }
 
                     if rows.is_empty() {
-                        debug!("Stackql query executed successfully, retrieved 0 items.");
+                        debug!("Stackql query executed successfully, retrieved 0 items.\n\nresults:\n\n[]\n");
                         if attempt < retries {
                             thread::sleep(Duration::from_secs(delay as u64));
                             attempt += 1;
@@ -113,7 +115,12 @@ pub fn run_stackql_query(
 
                         // Check for count query
                         if let Some(count_str) = result_maps[0].get("count") {
-                            debug!("Stackql query executed successfully, count: {}", count_str);
+                            if let Ok(json) = serde_json::to_string_pretty(&result_maps) {
+                                debug!(
+                                    "Stackql query executed successfully, count: {}\n\nresults:\n\n{}\n",
+                                    count_str, json
+                                );
+                            }
                             if let Ok(count) = count_str.parse::<i64>() {
                                 if count > 1 {
                                     catch_error_and_exit(&format!(
@@ -126,10 +133,12 @@ pub fn run_stackql_query(
                         }
                     }
 
-                    debug!(
-                        "Stackql query executed successfully, retrieved {} items.",
-                        result_maps.len()
-                    );
+                    if let Ok(json) = serde_json::to_string_pretty(&result_maps) {
+                        debug!(
+                            "Stackql query executed successfully, retrieved {} items.\n\nresults:\n\n{}\n",
+                            result_maps.len(), json
+                        );
+                    }
                     return result_maps;
                 }
                 QueryResult::Command(msg) => {
@@ -364,9 +373,32 @@ pub fn run_test_with_fields(
     }
 
     // If no count field, for non-delete test consider any result as exists
-    // and capture all returned fields
+    // and capture all returned fields.
+    // However, if multiple rows are returned this is a fatal error — the
+    // exists (identifier) query must return exactly 0 or 1 rows.
+    if !delete_test && result.len() > 1 {
+        catch_error_and_exit(&format!(
+            "Exists query for [{}] returned {} rows (expected 0 or 1). \
+             This indicates an ambiguous resource identifier — fix the \
+             exists query or tag configuration so it returns a single row.",
+            resource_name,
+            result.len()
+        ));
+    }
+
+    // However, if all non-trivial field values are "null" or empty, treat
+    // as "does not exist" (e.g. a CASE WHEN that returned NULL).
     if !delete_test && !result.is_empty() {
-        let fields = Some(result[0].clone());
+        let row = &result[0];
+        let all_null = row.values().all(|v| v == "null" || v.is_empty());
+        if all_null {
+            debug!(
+                "Test result false for [{}]: all field values are null/empty",
+                resource_name
+            );
+            return (false, None);
+        }
+        let fields = Some(row.clone());
         return (true, fields);
     }
 

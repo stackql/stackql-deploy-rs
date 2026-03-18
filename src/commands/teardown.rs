@@ -16,10 +16,9 @@ use crate::commands::common_args::{
     FailureAction,
 };
 use crate::core::config::get_resource_type;
-use crate::core::utils::catch_error_and_exit;
 use crate::utils::connection::create_client;
 use crate::utils::display::{print_unicode_box, BorderColor};
-use crate::utils::server::check_and_start_server;
+use crate::utils::server::{check_and_start_server, stop_local_server};
 
 /// Configures the `teardown` command for the CLI application.
 pub fn command() -> Command {
@@ -80,6 +79,8 @@ pub fn execute(matches: &ArgMatches) {
     );
 
     println!("teardown complete (dry run: {})", is_dry_run);
+
+    stop_local_server();
 }
 
 /// Collect exports for all resources before teardown.
@@ -95,7 +96,7 @@ fn collect_exports(runner: &mut CommandRunner, show_queries: bool, dry_run: bool
         let res_type = get_resource_type(resource).to_string();
         info!("getting exports for resource [{}]", resource.name);
 
-        let full_context = runner.get_full_context(resource);
+        let mut full_context = runner.get_full_context(resource);
 
         if res_type == "command" {
             continue;
@@ -107,10 +108,32 @@ fn collect_exports(runner: &mut CommandRunner, show_queries: bool, dry_run: bool
                 (Some(iq), 1u32, 0u32)
             } else {
                 let queries = runner.get_queries(resource, &full_context);
+                // Run exists query first to capture this.* fields needed by
+                // exports (e.g. this.identifier).
+                if let Some(eq) = queries.get("exists") {
+                    let rendered =
+                        runner.render_query(&resource.name, "exists", &eq.template, &full_context);
+                    let (_exists, fields) = runner.check_if_resource_exists(
+                        resource,
+                        &rendered,
+                        eq.options.retries,
+                        eq.options.retry_delay,
+                        dry_run,
+                        show_queries,
+                        false,
+                    );
+                    if let Some(ref f) = fields {
+                        for (k, v) in f {
+                            full_context.insert(format!("{}.{}", resource.name, k), v.clone());
+                        }
+                    }
+                }
                 if let Some(eq) = queries.get("exports") {
                     let rendered =
                         runner.render_query(&resource.name, "exports", &eq.template, &full_context);
-                    (Some(rendered), eq.options.retries, eq.options.retry_delay)
+                    // During teardown use minimal retries - the resource may
+                    // already be partially deleted.
+                    (Some(rendered), 1u32, 0u32)
                 } else {
                     (None, 1u32, 0u32)
                 }
@@ -201,8 +224,8 @@ fn run_teardown(runner: &mut CommandRunner, dry_run: bool, show_queries: bool, _
             exists_query_str,
             exists_retries,
             exists_retry_delay,
-            postdelete_retries,
-            postdelete_retry_delay,
+            _postdelete_retries,
+            _postdelete_retry_delay,
         ) = if let Some(eq) = resource_queries.get("exists") {
             let rendered =
                 runner.render_query(&resource.name, "exists", &eq.template, &full_context);
@@ -334,21 +357,26 @@ fn run_teardown(runner: &mut CommandRunner, dry_run: bool, show_queries: bool, _
             continue;
         }
 
-        // Confirm deletion
-        let (resource_deleted, _) = runner.check_if_resource_exists(
+        // Confirm deletion - single check, don't poll excessively.
+        // Cloud Control deletes are async; if the resource is still
+        // visible on the first check that's expected, move on.
+        let (still_exists, _) = runner.check_if_resource_exists(
             resource,
             &exists_query_str,
-            postdelete_retries,
-            postdelete_retry_delay,
+            1,
+            0,
             dry_run,
             show_queries,
             true, // delete_test
         );
 
-        if resource_deleted {
+        if !still_exists {
             info!("successfully deleted {}", resource.name);
-        } else if !dry_run {
-            catch_error_and_exit(&format!("failed to delete {}.", resource.name));
+        } else {
+            info!(
+                "[{}] delete dispatched (resource may still be deleting asynchronously)",
+                resource.name
+            );
         }
     }
 

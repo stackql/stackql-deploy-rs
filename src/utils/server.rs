@@ -387,33 +387,48 @@ pub fn check_and_start_server() {
             "Host '{}' is local; checking if server is running on port {}...",
             host, port
         );
+        // Always stop any existing server to ensure a clean session
+        // with the current environment (auth creds, provider versions, etc.)
         if is_server_running(port) {
-            info!("Local server is already running on port {}.", port);
-        } else {
-            debug!(
-                "Server not detected on port {}; will attempt to start it.",
+            info!(
+                "Stopping existing server on port {} for clean session.",
                 port
             );
-            info!("Server not running. Starting server...");
-
-            let options = StartServerOptions {
-                host: host.to_string(),
-                port,
-                ..Default::default()
-            };
-
-            debug!(
-                "StartServerOptions: host={}, port={}",
-                options.host, options.port
-            );
-
-            if let Err(e) = start_server(&options) {
-                error!("Failed to start server: {}", e);
-                process::exit(1);
+            if let Err(e) = stop_server(port) {
+                warn!("Failed to stop existing server: {}", e);
             }
+            // Brief pause to allow the port to be released
+            thread::sleep(Duration::from_secs(1));
+        }
+
+        info!("Starting server...");
+        let options = StartServerOptions {
+            host: host.to_string(),
+            port,
+            ..Default::default()
+        };
+
+        if let Err(e) = start_server(&options) {
+            error!("Failed to start server: {}", e);
+            process::exit(1);
         }
     } else {
         debug!("Host '{}' is remote; skipping local server start.", host);
         info!("Using remote server {}:{}", host, port);
+    }
+}
+
+/// Stops the local server after an operation completes.
+/// Called at the end of build, test, and teardown to ensure
+/// the server doesn't linger with stale auth context.
+pub fn stop_local_server() {
+    let host = server_host();
+    let port = server_port();
+
+    if LOCAL_SERVER_ADDRESSES.contains(&host) && is_server_running(port) {
+        debug!("Stopping local server after operation.");
+        if let Err(e) = stop_server(port) {
+            warn!("Failed to stop server after operation: {}", e);
+        }
     }
 }

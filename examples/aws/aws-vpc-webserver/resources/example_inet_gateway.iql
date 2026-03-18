@@ -1,17 +1,32 @@
 /*+ exists */
-SELECT split_part(ResourceARN, '/', 2) as identifier
-FROM awscc.tagging.tagged_resources
-WHERE region = '{{ region }}'
-AND TagFilters = '[{"Key":"stackql:stack-name","Values":["{{ stack_name }}"]},{"Key":"stackql:stack-env","Values":["{{ stack_env }}"]},{"Key":"stackql:resource-name","Values":["example_inet_gateway"]}]'
-AND ResourceTypeFilters = '["ec2:internet-gateway"]';
+WITH tagged_resources AS
+(
+	SELECT split_part(ResourceARN, '/', 2) as internet_gateway_id
+	FROM awscc.tagging.tagged_resources
+	WHERE region = '{{ region }}'
+	AND TagFilters = '{{ global_tags | to_aws_tag_filters }}'
+	AND ResourceTypeFilters = '["ec2:internet-gateway"]'
+),
+internet_gateways AS
+(
+	SELECT internet_gateway_id
+	FROM awscc.ec2.internet_gateways_list_only
+	WHERE region = '{{ region }}'
+)
+SELECT r.internet_gateway_id
+FROM internet_gateways r
+INNER JOIN tagged_resources tr
+ON r.internet_gateway_id = tr.internet_gateway_id;
 
 /*+ statecheck, retries=5, retry_delay=5 */
 SELECT COUNT(*) as count FROM
 (
-SELECT internet_gateway_id
+SELECT 
+AWS_POLICY_EQUAL(tags, '{{ inet_gateway_tags }}') as test_tags
 FROM awscc.ec2.internet_gateways
-WHERE Identifier = '{{ this.identifier }}'
+WHERE Identifier = '{{ this.internet_gateway_id }}'
 AND region = '{{ region }}'
+AND test_tags = 1
 ) t;
 
 /*+ create */
@@ -21,16 +36,13 @@ INSERT INTO awscc.ec2.internet_gateways (
 )
 SELECT
  '{{ inet_gateway_tags }}',
- '{{ region }}';
+ '{{ region }}'
+RETURNING *;
 
-/*+ exports, retries=5, retry_delay=5 */
-SELECT split_part(ResourceARN, '/', 2) as internet_gateway_id
-FROM awscc.tagging.tagged_resources
-WHERE region = '{{ region }}'
-AND TagFilters = '[{"Key":"stackql:stack-name","Values":["{{ stack_name }}"]},{"Key":"stackql:stack-env","Values":["{{ stack_env }}"]},{"Key":"stackql:resource-name","Values":["example_inet_gateway"]}]'
-AND ResourceTypeFilters = '["ec2:internet-gateway"]';
+/*+ exports */
+SELECT '{{ this.internet_gateway_id }}' as internet_gateway_id;
 
 /*+ delete */
 DELETE FROM awscc.ec2.internet_gateways
-WHERE data__Identifier = '{{ internet_gateway_id }}'
+WHERE Identifier = '{{ internet_gateway_id }}'
 AND region = '{{ region }}';

@@ -140,6 +140,47 @@ pub struct Resource {
     /// Auth configuration for the resource
     #[serde(default)]
     pub auth: Option<serde_yaml::Value>,
+
+    /// Return value mappings from mutation operations (create, update, delete).
+    /// Each operation maps to a list of field specs:
+    ///   - `Identifier: identifier` (rename: capture `Identifier` as `this.identifier`)
+    ///   - `ErrorCode` (direct: capture as `this.ErrorCode`)
+    #[serde(default)]
+    pub return_vals: Option<HashMap<String, Vec<serde_yaml::Value>>>,
+}
+
+impl Resource {
+    /// Parse `return_vals` for a given operation (create, update, delete).
+    /// Returns a list of (source_field, target_field) pairs.
+    /// - `Identifier: identifier` -> ("Identifier", "identifier")
+    /// - `ErrorCode` (string) -> ("ErrorCode", "ErrorCode")
+    pub fn get_return_val_mappings(&self, operation: &str) -> Vec<(String, String)> {
+        let Some(ref rv) = self.return_vals else {
+            return vec![];
+        };
+        let Some(specs) = rv.get(operation) else {
+            return vec![];
+        };
+        let mut mappings = Vec::new();
+        for spec in specs {
+            match spec {
+                serde_yaml::Value::String(s) => {
+                    // Direct capture: field name used as-is
+                    mappings.push((s.clone(), s.clone()));
+                }
+                serde_yaml::Value::Mapping(m) => {
+                    // Rename: { SourceField: target_name }
+                    for (k, v) in m {
+                        if let (Some(src), Some(tgt)) = (k.as_str(), v.as_str()) {
+                            mappings.push((src.to_string(), tgt.to_string()));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        mappings
+    }
 }
 
 /// Default resource type value

@@ -1,20 +1,39 @@
 /*+ exists */
-SELECT split_part(ResourceARN, '/', 2) as identifier
-FROM awscc.tagging.tagged_resources
-WHERE region = '{{ region }}'
-AND TagFilters = '[{"Key":"stackql:stack-name","Values":["{{ stack_name }}"]},{"Key":"stackql:stack-env","Values":["{{ stack_env }}"]},{"Key":"stackql:resource-name","Values":["example_web_server"]}]'
-AND ResourceTypeFilters = '["ec2:instance"]';
+WITH tagged_resources AS
+(
+    SELECT split_part(ResourceARN, '/', 2) as instance_id
+    FROM awscc.tagging.tagged_resources
+    WHERE region = '{{ region }}'
+    AND TagFilters = '{{ global_tags | to_aws_tag_filters }}'
+    AND ResourceTypeFilters = '["ec2:instance"]'
+),
+instances AS
+(
+    SELECT instance_id
+    FROM awscc.ec2.instances_list_only
+    WHERE region = '{{ region }}'
+)
+SELECT r.instance_id
+FROM instances r
+INNER JOIN tagged_resources tr
+ON r.instance_id = tr.instance_id;
 
 /*+ statecheck, retries=10, retry_delay=10 */
 SELECT COUNT(*) as count FROM
 (
-SELECT instance_id, instance_type, subnet_id, image_id
+SELECT 
+AWS_POLICY_EQUAL(security_group_ids, '{{ sg_ids }}') as test_security_group_ids,
+AWS_POLICY_EQUAL(tags, '{{ instance_tags }}') as test_instance_tags
 FROM awscc.ec2.instances
-WHERE Identifier = '{{ this.identifier }}'
+WHERE Identifier = '{{ this.instance_id }}'
 AND region = '{{ region }}'
+AND instance_type = '{{ instance_type }}'
+AND subnet_id = '{{ instance_subnet_id }}'
+AND image_id = '{{ ami_id }}'
+AND user_data = '{{ user_data | base64_encode }}'
 ) t
-WHERE instance_type = '{{ instance_type }}'
-AND subnet_id = '{{ instance_subnet_id }}';
+WHERE test_security_group_ids = 1
+AND test_instance_tags = 1;
 
 /*+ create */
 INSERT INTO awscc.ec2.instances (
@@ -33,16 +52,13 @@ SELECT
  '{{ sg_ids }}',
  '{{ user_data | base64_encode }}',
  '{{ instance_tags }}',
- '{{ region }}';
+ '{{ region }}'
+RETURNING *;
 
-/*+ exports, retries=10, retry_delay=10 */
-SELECT split_part(ResourceARN, '/', 2) as instance_id
-FROM awscc.tagging.tagged_resources
-WHERE region = '{{ region }}'
-AND TagFilters = '[{"Key":"stackql:stack-name","Values":["{{ stack_name }}"]},{"Key":"stackql:stack-env","Values":["{{ stack_env }}"]},{"Key":"stackql:resource-name","Values":["example_web_server"]}]'
-AND ResourceTypeFilters = '["ec2:instance"]';
+/*+ exports */
+SELECT '{{ this.instance_id }}' as instance_id;
 
 /*+ delete */
 DELETE FROM awscc.ec2.instances
-WHERE data__Identifier = '{{ instance_id }}'
+WHERE Identifier = '{{ instance_id }}'
 AND region = '{{ region }}';

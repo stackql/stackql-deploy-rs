@@ -1,19 +1,34 @@
 /*+ exists */
-SELECT split_part(ResourceARN, '/', 2) as identifier
-FROM awscc.tagging.tagged_resources
-WHERE region = '{{ region }}'
-AND TagFilters = '[{"Key":"stackql:stack-name","Values":["{{ stack_name }}"]},{"Key":"stackql:stack-env","Values":["{{ stack_env }}"]},{"Key":"stackql:resource-name","Values":["example_vpc"]}]'
-AND ResourceTypeFilters = '["ec2:vpc"]';
+WITH tagged_resources AS
+(
+    SELECT split_part(ResourceARN, '/', 2) as vpc_id
+    FROM awscc.tagging.tagged_resources
+    WHERE region = '{{ region }}'
+    AND TagFilters = '{{ global_tags | to_aws_tag_filters }}'
+    AND ResourceTypeFilters = '["ec2:vpc"]'
+),
+vpcs AS
+(
+    SELECT vpc_id
+    FROM awscc.ec2.vpcs_list_only
+    WHERE region = '{{ region }}'
+)
+SELECT r.vpc_id
+FROM vpcs r
+INNER JOIN tagged_resources tr
+ON r.vpc_id = tr.vpc_id;
 
 /*+ statecheck, retries=5, retry_delay=5 */
 SELECT COUNT(*) as count FROM
 (
-SELECT vpc_id, cidr_block
+SELECT 
+AWS_POLICY_EQUAL(tags, '{{ vpc_tags }}') as test_tags
 FROM awscc.ec2.vpcs
-WHERE Identifier = '{{ this.identifier }}'
+WHERE Identifier = '{{ this.vpc_id }}'
 AND region = '{{ region }}'
+AND cidr_block = '{{ vpc_cidr_block }}'
 ) t
-WHERE cidr_block = '{{ vpc_cidr_block }}';
+WHERE test_tags = 1;
 
 /*+ create */
 INSERT INTO awscc.ec2.vpcs (
@@ -28,17 +43,14 @@ SELECT
  '{{ vpc_tags }}',
  true,
  true,
- '{{ region }}';
+ '{{ region }}'
+RETURNING *;
 
-/*+ exports, retries=5, retry_delay=5 */
-SELECT split_part(ResourceARN, '/', 2) as vpc_id,
-'{{ vpc_cidr_block }}' as vpc_cidr_block
-FROM awscc.tagging.tagged_resources
-WHERE region = '{{ region }}'
-AND TagFilters = '[{"Key":"stackql:stack-name","Values":["{{ stack_name }}"]},{"Key":"stackql:stack-env","Values":["{{ stack_env }}"]},{"Key":"stackql:resource-name","Values":["example_vpc"]}]'
-AND ResourceTypeFilters = '["ec2:vpc"]';
+/*+ exports */
+SELECT '{{ this.vpc_id }}' as vpc_id,
+'{{ vpc_cidr_block }}' as vpc_cidr_block;
 
 /*+ delete */
 DELETE FROM awscc.ec2.vpcs
-WHERE data__Identifier = '{{ vpc_id }}'
+WHERE Identifier = '{{ vpc_id }}'
 AND region = '{{ region }}';

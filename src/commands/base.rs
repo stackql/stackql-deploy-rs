@@ -18,9 +18,8 @@ use crate::core::templating::{self, ParsedQuery};
 use crate::core::utils::{
     catch_error_and_exit, check_exports_as_statecheck_proxy, check_short_circuit, export_vars,
     flatten_returning_row, has_returning_clause, perform_retries, perform_retries_with_fields,
-    pull_providers,
-    run_callback_poll, run_ext_script, run_stackql_command, run_stackql_dml_returning,
-    run_stackql_query, show_query,
+    pull_providers, run_callback_poll, run_ext_script, run_stackql_command,
+    run_stackql_dml_returning, run_stackql_query, show_query,
 };
 use crate::resource::manifest::{Manifest, Resource};
 use crate::resource::validation::validate_manifest;
@@ -179,6 +178,18 @@ impl CommandRunner {
         full_context: &HashMap<String, String>,
     ) -> String {
         templating::render_query(&self.engine, resource_name, anchor, template, full_context)
+    }
+
+    /// Try to render a query template, returning None if variables are missing.
+    /// Used for deferred rendering where this.* fields may not yet be available.
+    pub fn try_render_query(
+        &self,
+        resource_name: &str,
+        anchor: &str,
+        template: &str,
+        full_context: &HashMap<String, String>,
+    ) -> Option<String> {
+        templating::try_render_query(&self.engine, resource_name, anchor, template, full_context)
     }
 
     /// Check if a resource exists using the exists query.
@@ -683,6 +694,27 @@ impl CommandRunner {
 
         if exports.is_empty() {
             if ignore_missing_exports {
+                // During teardown, set all expected exports to <unknown> so
+                // downstream queries can still render (the resource may
+                // already be partially deleted).
+                let mut fallback = HashMap::new();
+                for item in expected_exports {
+                    if let Some(s) = item.as_str() {
+                        fallback.insert(s.to_string(), "<unknown>".to_string());
+                    } else if let Some(map) = item.as_mapping() {
+                        for (_, val) in map {
+                            if let Some(v) = val.as_str() {
+                                fallback.insert(v.to_string(), "<unknown>".to_string());
+                            }
+                        }
+                    }
+                }
+                export_vars(
+                    &mut self.global_context,
+                    &resource.name,
+                    &fallback,
+                    protected_exports,
+                );
                 return;
             }
             show_query(true, exports_query);

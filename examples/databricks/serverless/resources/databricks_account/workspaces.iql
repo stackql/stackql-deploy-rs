@@ -2,8 +2,7 @@
 SELECT count(*) as count
 FROM databricks_account.provisioning.workspaces
 WHERE account_id = '{{ account_id }}'
-AND workspace_name = '{{ workspace_name }}'
-;
+AND workspace_name = '{{ workspace_name }}';
 
 /*+ create */
 INSERT INTO databricks_account.provisioning.workspaces (
@@ -38,8 +37,7 @@ AND workspace_id IN (
     WHERE account_id = '{{ account_id }}'
     AND workspace_name = '{{ workspace_name }}'
 )
-AND update_mask = 'credentials_id,storage_configuration_id,compute_mode,pricing_tier'
-;
+AND update_mask = 'credentials_id,storage_configuration_id,compute_mode,pricing_tier';
 
 /*+ statecheck, retries=5, retry_delay=10 */
 SELECT count(*) as count
@@ -50,8 +48,7 @@ storage_configuration_id = '{{ storage_configuration_id }}' AND
 workspace_name = '{{ workspace_name }}' AND
 aws_region = '{{ aws_region }}' AND
 pricing_tier = '{{ pricing_tier }}' AND
-account_id = '{{ account_id }}'
-;
+account_id = '{{ account_id }}';
 
 /*+ exports */
 SELECT 
@@ -62,11 +59,9 @@ workspace_status,
 'https://' || deployment_name || '.cloud.databricks.com' AS workspace_url
 FROM databricks_account.provisioning.workspaces
 WHERE account_id = '{{ account_id }}'
-AND workspace_name = '{{ workspace_name }}'
-;
+AND workspace_name = '{{ workspace_name }}';
 
 /*+ delete */
 DELETE FROM databricks_account.provisioning.workspaces
 WHERE account_id = '{{ account_id }}'
-AND workspace_id = '{{ workspace_id }}'
-;
+AND workspace_id = '{{ workspace_id }}';

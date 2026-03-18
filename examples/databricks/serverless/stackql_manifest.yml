@@ -276,14 +276,14 @@ resources:
       - workspace_status
       - workspace_url
 
-  - name: workspace_admins_group
-    file: databricks_account/account_groups.iql
-    props:
-    - name: display_name
-      value: "{{ stack_name }}-{{ stack_env }}-workspace-admins"
-    exports:
-      - id
-      - display_name
+  # - name: workspace_admins_group
+  #   file: databricks_account/account_groups.iql
+  #   props:
+  #   - name: display_name
+  #     value: "{{ stack_name }}-{{ stack_env }}-workspace-admins"
+  #   exports:
+  #     - id
+  #     - display_name
 
   # - name: databricks_account/get_users
   #   type: query

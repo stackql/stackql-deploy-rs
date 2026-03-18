@@ -3,7 +3,7 @@ id: vpc-and-ec2-instance
 title: AWS VPC and EC2 Instance
 hide_title: false
 hide_table_of_contents: false
-description: A quick overview of how to get started with StackQL Deploy, including basic concepts and the essential components of a deployment.
+description: Deploy a complete AWS VPC networking stack with an EC2 web server using the awscc Cloud Control provider.
 tags: []
 draft: false
 unlisted: false
@@ -12,7 +12,7 @@ unlisted: false
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-In this example, we'll demonstrate how to set up a simple VPC with an EC2 instance in AWS using `stackql-deploy`. This setup is ideal for getting started with basic networking and compute resources on AWS.
+In this example, we'll demonstrate how to set up a complete VPC networking stack with an EC2 web server instance in AWS using `stackql-deploy` and the `awscc` (Cloud Control) provider.  Resources are identified using the `awscc.tagging.tagged_resources` service with a standard tag taxonomy.
 
 <div style={{ display: 'flex', justifyContent: 'center' }}>
   <img src="/img/library/aws/simple-aws-vpc-ec2-stack.png" alt="Simple AWS VPC EC2 Stack" style={{ width: '60%', height: 'auto' }} />
@@ -21,47 +21,44 @@ The EC2 instance is bootstrapped with a web server that serves a simple page usi
 
 ## Deploying the Stack
 
-> Install `stackql-deploy` (see [__Installing stackql-deploy__](/getting-started#installing-stackql-deploy)), set the `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` environment variables, that's it!
+> Install `stackql-deploy` (see [__Installing stackql-deploy__](/getting-started#installing-stackql-deploy)), set the `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_REGION` environment variables, that's it!
 
-Once you have setup your project directory (your "stack"), you can use the `stackql-deploy` cli application to deploy, test or teardown the stack in any given environment.  To deploy the stack to an environment labeled `sit`, run the following:
+Once you have setup your project directory (your "stack"), you can use the `stackql-deploy` cli application to deploy, test or teardown the stack in any given environment.  To deploy the stack to an environment labeled `dev`, run the following:
 
 ```bash
-stackql-deploy build aws-stack sit \
--e AWS_REGION=ap-southeast-2
+stackql-deploy build examples/aws/aws-vpc-webserver dev
 ```
-Use the `--dry-run` flag to view the queries to be run without actually running them, heres an example of a `dry-run` operation for a `prd` environment:
+Use the `--dry-run` flag to view the queries to be run without actually running them:
 
 ```bash
-stackql-deploy build aws-stack prd \
--e AWS_REGION=ap-southeast-2 \
---dry-run
+stackql-deploy build examples/aws/aws-vpc-webserver dev --dry-run --show-queries
 ```
 
 ## stackql_manifest.yml
 
-The `stackql_manifest.yml` defines the resources in yoru stack and their property values (for one or more environments).
+The `stackql_manifest.yml` defines the resources in your stack and their property values (for one or more environments).  This stack uses the `awscc` provider with a standard tag taxonomy (`stackql:stack-name`, `stackql:stack-env`, `stackql:resource-name`) for resource identification.
 
 <details>
   <summary>Click to expand the <code>stackql_manifest.yml</code> file</summary>
 
 ```yaml
 version: 1
-name: "aws-stack"
-description: description for "aws-stack"
+name: "aws-vpc-webserver"
+description: Provisions a complete AWS networking stack (VPC, subnet, internet gateway, route table, security group) with an Apache web server EC2 instance.
 providers:
-  - aws
+  - awscc
 globals:
   - name: region
     description: aws region
     value: "{{ AWS_REGION }}"
   - name: global_tags
     value:
-      - Key: Provisioner
-        Value: stackql
-      - Key: StackName
+      - Key: 'stackql:stack-name'
         Value: "{{ stack_name }}"
-      - Key: StackEnv
+      - Key: 'stackql:stack-env'
         Value: "{{ stack_env }}"
+      - Key: 'stackql:resource-name'
+        Value: "{{ resource_name }}"
 resources:
   - name: example_vpc
     props:
@@ -77,7 +74,7 @@ resources:
         value:
           - Key: Name
             Value: "{{ stack_name }}-{{ stack_env }}-vpc"
-        merge: 
+        merge:
           - global_tags
     exports:
       - vpc_id
@@ -96,7 +93,7 @@ resources:
         value:
           - Key: Name
             Value: "{{ stack_name }}-{{ stack_env }}-subnet"
-        merge: ['global_tags']      
+        merge: ['global_tags']
     exports:
       - subnet_id
       - availability_zone
@@ -123,11 +120,9 @@ resources:
   - name: example_subnet_rt_assn
     props: []
     exports:
-      - route_table_assn_id
+      - subnet_route_table_assn_id
   - name: example_inet_route
     props: []
-    exports:
-      - inet_route_indentifer
   - name: example_security_group
     props:
       - name: group_description
@@ -141,31 +136,29 @@ resources:
         merge: ['global_tags']
       - name: security_group_ingress
         value:
-          - CidrIp: "0.0.0.0/0"
+          - IpProtocol: "tcp"
+            CidrIp: "0.0.0.0/0"
             Description: Allow HTTP traffic
             FromPort: 80
             ToPort: 80
-            IpProtocol: "tcp"
-          - CidrIp: "{{ vpc_cidr_block }}"
+          - IpProtocol: "tcp"
+            CidrIp: "{{ vpc_cidr_block }}"
             Description: Allow SSH traffic from the internal network
             FromPort: 22
             ToPort: 22
-            IpProtocol: "tcp"
       - name: security_group_egress
         value:
-          - CidrIp: "0.0.0.0/0"
-            Description: Allow all outbound traffic
-            FromPort: 0
-            ToPort: 0
-            IpProtocol: "-1"
+        - CidrIp: "0.0.0.0/0"
+          Description: "Allow all outbound traffic"
+          FromPort: -1
+          ToPort: -1
+          IpProtocol: "-1"
     exports:
-      - security_group_id            
+      - security_group_id
   - name: example_web_server
     props:
-      - name: instance_name
-        value: "{{ stack_name }}-{{ stack_env }}-instance"
       - name: ami_id
-        value: ami-030a5acd7c996ef60
+        value: ami-05024c2628f651b80
       - name: instance_type
         value: t2.micro
       - name: instance_subnet_id
@@ -180,8 +173,7 @@ resources:
           yum install -y httpd
           systemctl start httpd
           systemctl enable httpd
-          echo '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>StackQL on AWS</title><style>body {font-family: Tahoma, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #f0f0f0; text-align: center;} img {height: auto;} code {background-color: #e8e8e8; padding: 2px 6px; border-radius: 3px; font-weight: bold;} p {font-size: 1.5em; font-weight: bold;}</style></head>' > /var/www/html/index.html
-          echo '<body><div><a href="https://github.com/stackql/stackql"><img src="https://stackql.io/img/stackql-logo-bold.png" alt="StackQL Logo"></a><p>Hello, <a href="https://github.com/stackql-labs/stackql-deploy-rs"><code>stackql-deploy</code></a> on AWS!</p></div></body></html>' >> /var/www/html/index.html
+          echo '<!DOCTYPE html>...' > /var/www/html/index.html
       - name: instance_tags
         value:
           - Key: Name
@@ -189,6 +181,10 @@ resources:
         merge: ['global_tags']
     exports:
       - instance_id
+  - name: get_web_server_url
+    type: query
+    props: []
+    exports:
       - public_dns_name
 ```
 
@@ -196,7 +192,7 @@ resources:
 
 ## Resource Query Files
 
-Resource query files are templates which are used to create, update, test and delete resources in your stack.  Here are some example resource query files in this example:
+Resource query files are templates which are used to create, update, test and delete resources in your stack.  This stack uses the **identifier capture** pattern — the `exists` query discovers the resource via tags and the captured field is used in `statecheck` and `exports` queries via `{{ this.<field> }}`.
 
 <Tabs
   defaultValue="vpc"
@@ -209,68 +205,51 @@ Resource query files are templates which are used to create, update, test and de
 
 ```sql
 /*+ exists */
-SELECT COUNT(*) as count FROM
+WITH tagged_resources AS
 (
-SELECT vpc_id,
-json_group_object(tag_key, tag_value) as tags
-FROM aws.ec2.vpc_tags
-WHERE region = '{{ region }}'
-AND cidr_block = '{{ vpc_cidr_block }}'
-GROUP BY vpc_id
-HAVING json_extract(tags, '$.Provisioner') = 'stackql'
-AND json_extract(tags, '$.StackName') = '{{ stack_name }}'
-AND json_extract(tags, '$.StackEnv') = '{{ stack_env }}'
-) t; 
-
-/*+ create */
-INSERT INTO aws.ec2.vpcs (
- CidrBlock,
- Tags,
- EnableDnsSupport,
- EnableDnsHostnames, 
- region
+    SELECT split_part(ResourceARN, '/', 2) as vpc_id
+    FROM awscc.tagging.tagged_resources
+    WHERE region = '{{ region }}'
+    AND TagFilters = '{{ global_tags | to_aws_tag_filters }}'
+    AND ResourceTypeFilters = '["ec2:vpc"]'
+),
+vpcs AS
+(
+    SELECT vpc_id
+    FROM awscc.ec2.vpcs_list_only
+    WHERE region = '{{ region }}'
 )
-SELECT 
- '{{ vpc_cidr_block }}',
- '{{ vpc_tags }}',
- true,
- true,
- '{{ region }}';
+SELECT r.vpc_id
+FROM vpcs r
+INNER JOIN tagged_resources tr
+ON r.vpc_id = tr.vpc_id;
 
 /*+ statecheck, retries=5, retry_delay=5 */
 SELECT COUNT(*) as count FROM
 (
-SELECT vpc_id,
-cidr_block,
-json_group_object(tag_key, tag_value) as tags
-FROM aws.ec2.vpc_tags
-WHERE region = '{{ region }}'
+SELECT
+AWS_POLICY_EQUAL(tags, '{{ vpc_tags }}') as test_tags
+FROM awscc.ec2.vpcs
+WHERE Identifier = '{{ this.vpc_id }}'
+AND region = '{{ region }}'
 AND cidr_block = '{{ vpc_cidr_block }}'
-GROUP BY vpc_id
-HAVING json_extract(tags, '$.Provisioner') = 'stackql'
-AND json_extract(tags, '$.StackName') = '{{ stack_name }}'
-AND json_extract(tags, '$.StackEnv') = '{{ stack_env }}'
 ) t
-WHERE cidr_block = '{{ vpc_cidr_block
+WHERE test_tags = 1;
 
- }}'; 
+/*+ create */
+INSERT INTO awscc.ec2.vpcs (
+ CidrBlock, Tags, EnableDnsSupport, EnableDnsHostnames, region
+)
+SELECT
+ '{{ vpc_cidr_block }}', '{{ vpc_tags }}', true, true, '{{ region }}'
+RETURNING *;
 
 /*+ exports */
-SELECT vpc_id, vpc_cidr_block FROM
-(
-SELECT vpc_id, cidr_block as "vpc_cidr_block",
-json_group_object(tag_key, tag_value) as tags
-FROM aws.ec2.vpc_tags
-WHERE region = '{{ region }}'
-AND cidr_block = '{{ vpc_cidr_block }}'
-GROUP BY vpc_id
-HAVING json_extract(tags, '$.Provisioner') = 'stackql'
-AND json_extract(tags, '$.StackName') = '{{ stack_name }}'
-AND json_extract(tags, '$.StackEnv') = '{{ stack_env }}'
-) t;
+SELECT '{{ this.vpc_id }}' as vpc_id,
+'{{ vpc_cidr_block }}' as vpc_cidr_block;
 
 /*+ delete */
-DELETE FROM aws.ec2.vpcs
+DELETE FROM awscc.ec2.vpcs
 WHERE Identifier = '{{ vpc_id }}'
 AND region = '{{ region }}';
 ```
@@ -280,69 +259,55 @@ AND region = '{{ region }}';
 
 ```sql
 /*+ exists */
-SELECT COUNT(*) as count FROM
+WITH tagged_resources AS
 (
-SELECT subnet_id,
-json_group_object(tag_key, tag_value) as tags
-FROM aws.ec2.subnet_tags
-WHERE region = '{{ region }}'
-AND vpc_id = '{{ vpc_id }}'
-GROUP BY subnet_id
-HAVING json_extract(tags, '$.Provisioner') = 'stackql'
-AND json_extract(tags, '$.StackName') = '{{ stack_name }}'
-AND json_extract(tags, '$.StackEnv') = '{{ stack_env }}'
-) t; 
-
-/*+ create */
-INSERT INTO aws.ec2.subnets (
- VpcId,
- CidrBlock,
- MapPublicIpOnLaunch,
- Tags,
- region
+    SELECT split_part(ResourceARN, '/', 2) as subnet_id
+    FROM awscc.tagging.tagged_resources
+    WHERE region = '{{ region }}'
+    AND TagFilters = '{{ global_tags | to_aws_tag_filters }}'
+    AND ResourceTypeFilters = '["ec2:subnet"]'
+),
+subnets AS
+(
+    SELECT subnet_id
+    FROM awscc.ec2.subnets_list_only
+    WHERE region = '{{ region }}'
 )
-SELECT 
- '{{ vpc_id }}',
- '{{ subnet_cidr_block }}',
- true,
- '{{ subnet_tags }}',
- '{{ region }}';
+SELECT r.subnet_id
+FROM subnets r
+INNER JOIN tagged_resources tr
+ON r.subnet_id = tr.subnet_id;
 
 /*+ statecheck, retries=5, retry_delay=5 */
 SELECT COUNT(*) as count FROM
 (
-SELECT subnet_id,
-cidr_block,
-json_group_object(tag_key, tag_value) as tags
-FROM aws.ec2.subnet_tags
-WHERE region = '{{ region }}'
+SELECT
+AWS_POLICY_EQUAL(tags, '{{ subnet_tags }}') as test_tags
+FROM awscc.ec2.subnets
+WHERE Identifier = '{{ this.subnet_id }}'
+AND region = '{{ region }}'
+AND cidr_block = '{{ subnet_cidr_block }}'
 AND vpc_id = '{{ vpc_id }}'
-GROUP BY subnet_id
-HAVING json_extract(tags, '$.Provisioner') = 'stackql'
-AND json_extract(tags, '$.StackName') = '{{ stack_name }}'
-AND json_extract(tags, '$.StackEnv') = '{{ stack_env }}'
 ) t
-WHERE cidr_block = '{{ subnet_cidr_block }}'; 
+WHERE test_tags = 1;
 
-/*+ exports */
-SELECT subnet_id, availability_zone FROM
-(
-SELECT subnet_id, 
-availability_zone,
-cidr_block,
-json_group_object(tag_key, tag_value) as tags
-FROM aws.ec2.subnet_tags
-WHERE region = '{{ region }}'
-AND vpc_id = '{{ vpc_id }}'
-GROUP BY subnet_id
-HAVING json_extract(tags, '$.Provisioner') = 'stackql'
-AND json_extract(tags, '$.StackName') = '{{ stack_name }}'
-AND json_extract(tags, '$.StackEnv') = '{{ stack_env }}'
-) t
-WHERE cidr_block = '{{ subnet_cidr_block }}'; 
+/*+ create */
+INSERT INTO awscc.ec2.subnets (
+ VpcId, CidrBlock, MapPublicIpOnLaunch, Tags, region
+)
+SELECT
+ '{{ vpc_id }}', '{{ subnet_cidr_block }}', true,
+ '{{ subnet_tags }}', '{{ region }}'
+RETURNING *;
+
+/*+ exports, retries=5, retry_delay=5 */
+SELECT subnet_id, availability_zone
+FROM awscc.ec2.subnets
+WHERE Identifier = '{{ this.subnet_id }}'
+AND region = '{{ region }}';
 
 /*+ delete */
-DELETE FROM aws.ec2.subnets
+DELETE FROM awscc.ec2.subnets
 WHERE Identifier = '{{ subnet_id }}'
 AND region = '{{ region }}';
 ```
@@ -350,10 +315,28 @@ AND region = '{{ region }}';
 </TabItem>
 </Tabs>
 
+## Key Patterns
+
+### Tag-Based Resource Discovery
+
+Resources are identified using `awscc.tagging.tagged_resources` cross-referenced with the provider's `*_list_only` resource via a CTE + `INNER JOIN`.  This ensures the resource both has the expected tags **and** currently exists in the provider (eliminating stale tag records).
+
+### `to_aws_tag_filters` Filter
+
+The `global_tags` variable is converted to AWS TagFilters format using the [`to_aws_tag_filters`](/template-filters#to_aws_tag_filters) custom filter, keeping queries clean:
+
+```sql
+AND TagFilters = '{{ global_tags | to_aws_tag_filters }}'
+```
+
+### Property Verification with `AWS_POLICY_EQUAL`
+
+Statechecks use [`AWS_POLICY_EQUAL`](https://stackql.io/docs/language-spec/functions/json/aws_policy_equal) for order-independent comparison of tags and security group rules.
+
 ## More Information
 
-The complete code for this example stack is available [__here__](https://github.com/stackql-labs/stackql-deploy-rs/tree/main/examples/aws/aws-stack). For more information on how to use StackQL and StackQL Deploy, visit:
+The complete code for this example stack is available [__here__](https://github.com/stackql/stackql-deploy-rs/tree/main/examples/aws/aws-vpc-webserver). For more information on how to use StackQL and StackQL Deploy, visit:
 
-- [`aws` provider docs](https://stackql.io/providers/aws)
-- [`stackql`](https://github.com/stackql)
-- [`stackql-deploy` GitHub repo](https://github.com/stackql-labs/stackql-deploy-rs)
+- [`awscc` provider docs](https://awscc.stackql.io/providers/awscc/)
+- [`stackql`](https://github.com/stackql/stackql)
+- [`stackql-deploy` GitHub repo](https://github.com/stackql/stackql-deploy-rs)

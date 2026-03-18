@@ -149,6 +149,38 @@ SELECT
 ;
 ```
 
+### `to_aws_tag_filters`
+
+Converts a list of AWS tag key-value pairs (as used in `global_tags`) into the AWS Resource Groups Tagging API `TagFilters` format. This is an AWS-specific filter designed for use with `awscc.tagging.tagged_resources` queries.
+
+**Input format:** `[{"Key": "k", "Value": "v"}, ...]`
+**Output format:** `[{"Key": "k", "Values": ["v"]}, ...]`
+
+**Example usage:**
+
+```sql
+/*+ exists */
+SELECT split_part(ResourceARN, '/', 2) as vpc_id
+FROM awscc.tagging.tagged_resources
+WHERE region = '{{ region }}'
+AND TagFilters = '{{ global_tags | to_aws_tag_filters }}'
+AND ResourceTypeFilters = '["ec2:vpc"]'
+```
+
+This filter is typically applied to the `global_tags` variable defined in the manifest:
+
+```yaml
+globals:
+  - name: global_tags
+    value:
+      - Key: 'stackql:stack-name'
+        Value: "{{ stack_name }}"
+      - Key: 'stackql:stack-env'
+        Value: "{{ stack_env }}"
+      - Key: 'stackql:resource-name'
+        Value: "{{ resource_name }}"
+```
+
 ## Special Variables
 
 StackQL Deploy injects the following built-in variables automatically — no manifest configuration is required.

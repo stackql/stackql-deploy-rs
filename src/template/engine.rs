@@ -228,6 +228,7 @@ fn register_custom_filters(tera: &mut Tera) {
     tera.register_filter("generate_patch_document", filter_generate_patch_document);
     tera.register_filter("sql_list", filter_sql_list);
     tera.register_filter("sql_escape", filter_sql_escape);
+    tera.register_filter("to_aws_tag_filters", filter_to_aws_tag_filters);
 }
 
 /// from_json filter: parse a JSON string into a Tera value
@@ -404,6 +405,32 @@ fn filter_sql_escape(
         .ok_or_else(|| tera::Error::msg("sql_escape: expected a string"))?;
     let escaped = s.replace('\'', "''");
     Ok(tera::to_value(escaped)?)
+}
+
+/// to_aws_tag_filters filter: converts a JSON array of AWS tags
+/// from `[{"Key":"k","Value":"v"},...]` format to the AWS Resource Groups
+/// Tagging API TagFilters format `[{"Key":"k","Values":["v"]},...]`.
+/// Input is a string (the rendered global_tags JSON).
+fn filter_to_aws_tag_filters(
+    value: &tera::Value,
+    _args: &HashMap<String, tera::Value>,
+) -> tera::Result<tera::Value> {
+    let s = value
+        .as_str()
+        .ok_or_else(|| tera::Error::msg("to_aws_tag_filters: expected a string"))?;
+    let tags: Vec<serde_json::Value> = serde_json::from_str(s)
+        .map_err(|e| tera::Error::msg(format!("to_aws_tag_filters: invalid JSON: {}", e)))?;
+    let filters: Vec<serde_json::Value> = tags
+        .into_iter()
+        .filter_map(|tag| {
+            let key = tag.get("Key")?.as_str()?.to_string();
+            let value = tag.get("Value")?.as_str()?.to_string();
+            Some(serde_json::json!({"Key": key, "Values": [value]}))
+        })
+        .collect();
+    let result = serde_json::to_string(&filters)
+        .map_err(|e| tera::Error::msg(format!("to_aws_tag_filters: serialization error: {}", e)))?;
+    Ok(tera::to_value(result)?)
 }
 
 /// Unit tests for template engine functionality.

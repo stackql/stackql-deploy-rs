@@ -1,20 +1,35 @@
 /*+ exists */
-SELECT split_part(ResourceARN, '/', 2) as identifier
-FROM awscc.tagging.tagged_resources
-WHERE region = '{{ region }}'
-AND TagFilters = '[{"Key":"stackql:stack-name","Values":["{{ stack_name }}"]},{"Key":"stackql:stack-env","Values":["{{ stack_env }}"]},{"Key":"stackql:resource-name","Values":["example_subnet"]}]'
-AND ResourceTypeFilters = '["ec2:subnet"]';
+WITH tagged_resources AS
+(
+    SELECT split_part(ResourceARN, '/', 2) as subnet_id
+    FROM awscc.tagging.tagged_resources
+    WHERE region = '{{ region }}'
+    AND TagFilters = '{{ global_tags | to_aws_tag_filters }}'
+    AND ResourceTypeFilters = '["ec2:subnet"]'
+),
+subnets AS
+(
+    SELECT subnet_id
+    FROM awscc.ec2.subnets_list_only
+    WHERE region = '{{ region }}'
+)
+SELECT r.subnet_id
+FROM subnets r
+INNER JOIN tagged_resources tr
+ON r.subnet_id = tr.subnet_id;
 
 /*+ statecheck, retries=5, retry_delay=5 */
 SELECT COUNT(*) as count FROM
 (
-SELECT subnet_id, vpc_id, cidr_block, map_public_ip_on_launch
+SELECT 
+AWS_POLICY_EQUAL(tags, '{{ subnet_tags }}') as test_tags
 FROM awscc.ec2.subnets
-WHERE Identifier = '{{ this.identifier }}'
+WHERE Identifier = '{{ this.subnet_id }}'
 AND region = '{{ region }}'
+AND cidr_block = '{{ subnet_cidr_block }}'
+AND vpc_id = '{{ vpc_id }}'
 ) t
-WHERE cidr_block = '{{ subnet_cidr_block }}'
-AND vpc_id = '{{ vpc_id }}';
+WHERE test_tags = 1;
 
 /*+ create */
 INSERT INTO awscc.ec2.subnets (
@@ -29,15 +44,16 @@ SELECT
  '{{ subnet_cidr_block }}',
  true,
  '{{ subnet_tags }}',
- '{{ region }}';
+ '{{ region }}'
+RETURNING *;
 
 /*+ exports, retries=5, retry_delay=5 */
 SELECT subnet_id, availability_zone
 FROM awscc.ec2.subnets
-WHERE Identifier = '{{ this.identifier }}'
+WHERE Identifier = '{{ this.subnet_id }}'
 AND region = '{{ region }}';
 
 /*+ delete */
 DELETE FROM awscc.ec2.subnets
-WHERE data__Identifier = '{{ subnet_id }}'
+WHERE Identifier = '{{ subnet_id }}'
 AND region = '{{ region }}';

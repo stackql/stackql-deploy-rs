@@ -1,19 +1,34 @@
 /*+ exists */
-SELECT split_part(ResourceARN, '/', 2) as identifier
-FROM awscc.tagging.tagged_resources
-WHERE region = '{% raw %}{{ region }}{% endraw %}'
-AND TagFilters = '[{"Key":"stackql:stack-name","Values":["{% raw %}{{ stack_name }}{% endraw %}"]},{"Key":"stackql:stack-env","Values":["{% raw %}{{ stack_env }}{% endraw %}"]},{"Key":"stackql:resource-name","Values":["example_vpc"]}]'
-AND ResourceTypeFilters = '["ec2:vpc"]';
+WITH tagged_resources AS
+(
+    SELECT split_part(ResourceARN, '/', 2) as vpc_id
+    FROM awscc.tagging.tagged_resources
+    WHERE region = '{% raw %}{{ region }}{% endraw %}'
+    AND TagFilters = '{% raw %}{{ global_tags | to_aws_tag_filters }}{% endraw %}'
+    AND ResourceTypeFilters = '["ec2:vpc"]'
+),
+vpcs AS
+(
+    SELECT vpc_id
+    FROM awscc.ec2.vpcs_list_only
+    WHERE region = '{% raw %}{{ region }}{% endraw %}'
+)
+SELECT r.vpc_id
+FROM vpcs r
+INNER JOIN tagged_resources tr
+ON r.vpc_id = tr.vpc_id;
 
 /*+ statecheck, retries=5, retry_delay=5 */
 SELECT COUNT(*) as count FROM
 (
-SELECT vpc_id, cidr_block
+SELECT
+AWS_POLICY_EQUAL(tags, '{% raw %}{{ vpc_tags }}{% endraw %}') as test_tags
 FROM awscc.ec2.vpcs
-WHERE Identifier = '{% raw %}{{ this.identifier }}{% endraw %}'
+WHERE Identifier = '{% raw %}{{ this.vpc_id }}{% endraw %}'
 AND region = '{% raw %}{{ region }}{% endraw %}'
+AND cidr_block = '{% raw %}{{ vpc_cidr_block }}{% endraw %}'
 ) t
-WHERE cidr_block = '{% raw %}{{ vpc_cidr_block }}{% endraw %}';
+WHERE test_tags = 1;
 
 /*+ create */
 INSERT INTO awscc.ec2.vpcs (
@@ -28,17 +43,14 @@ SELECT
  '{% raw %}{{ vpc_tags }}{% endraw %}',
  true,
  true,
- '{% raw %}{{ region }}{% endraw %}';
+ '{% raw %}{{ region }}{% endraw %}'
+RETURNING *;
 
-/*+ exports, retries=5, retry_delay=5 */
-SELECT split_part(ResourceARN, '/', 2) as vpc_id,
-'{% raw %}{{ vpc_cidr_block }}{% endraw %}' as vpc_cidr_block
-FROM awscc.tagging.tagged_resources
-WHERE region = '{% raw %}{{ region }}{% endraw %}'
-AND TagFilters = '[{"Key":"stackql:stack-name","Values":["{% raw %}{{ stack_name }}{% endraw %}"]},{"Key":"stackql:stack-env","Values":["{% raw %}{{ stack_env }}{% endraw %}"]},{"Key":"stackql:resource-name","Values":["example_vpc"]}]'
-AND ResourceTypeFilters = '["ec2:vpc"]';
+/*+ exports */
+SELECT '{% raw %}{{ this.vpc_id }}{% endraw %}' as vpc_id,
+'{% raw %}{{ vpc_cidr_block }}{% endraw %}' as vpc_cidr_block;
 
 /*+ delete */
 DELETE FROM awscc.ec2.vpcs
-WHERE data__Identifier = '{% raw %}{{ vpc_id }}{% endraw %}'
+WHERE Identifier = '{% raw %}{{ vpc_id }}{% endraw %}'
 AND region = '{% raw %}{{ region }}{% endraw %}';

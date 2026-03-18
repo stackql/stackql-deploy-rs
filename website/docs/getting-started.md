@@ -11,7 +11,7 @@ unlisted: false
 
 import File from '/src/components/File';
 
-`stackql-deploy` is a model driven, declarative framework for provisioning, de-provisioning and testing cloud resources.  Heard enough and ready to get started? Jump to a [__Quick Start__](#quick-start).  
+`stackql-deploy` is a model driven, declarative framework for provisioning, de-provisioning and testing cloud resources.  Heard enough and ready to get started? Jump to a [__Quick Start__](#quick-start).
 
 ## Installing `stackql-deploy`
 
@@ -23,48 +23,95 @@ import TabItem from '@theme/TabItem';
 <Tabs>
 <TabItem value="macos" label="macOS">
 
-**Using Homebrew (recommended):**
+**Apple Silicon (ARM64):**
 
 ```bash
-brew tap stackql/tap
-brew install stackql-deploy
+curl -L https://github.com/stackql/stackql-deploy-rs/releases/latest/download/stackql-deploy-macos-arm64.tar.gz | tar xz
+sudo mv stackql-deploy /usr/local/bin/
 ```
 
-**Or download the installer package:**
+**Intel (x86_64):**
 
-Download the latest `.pkg` installer from the [GitHub Releases](https://github.com/stackql-labs/stackql-deploy-rs/releases) page.
+```bash
+curl -L https://github.com/stackql/stackql-deploy-rs/releases/latest/download/stackql-deploy-macos-x86_64.tar.gz | tar xz
+sudo mv stackql-deploy /usr/local/bin/
+```
 
 </TabItem>
 <TabItem value="linux" label="Linux">
 
-**Download the binary:**
+**x86_64:**
 
 ```bash
-curl -L https://github.com/stackql-labs/stackql-deploy-rs/releases/latest/download/stackql-deploy-linux-x86_64.tar.gz | tar xz
+curl -L https://github.com/stackql/stackql-deploy-rs/releases/latest/download/stackql-deploy-linux-x86_64.tar.gz | tar xz
+sudo mv stackql-deploy /usr/local/bin/
+```
+
+**ARM64:**
+
+```bash
+curl -L https://github.com/stackql/stackql-deploy-rs/releases/latest/download/stackql-deploy-linux-arm64.tar.gz | tar xz
 sudo mv stackql-deploy /usr/local/bin/
 ```
 
 </TabItem>
 <TabItem value="windows" label="Windows">
 
-**Using Chocolatey (recommended):**
+**PowerShell:**
 
 ```powershell
-choco install stackql-deploy
+Invoke-WebRequest -Uri "https://github.com/stackql/stackql-deploy-rs/releases/latest/download/stackql-deploy-windows-x86_64.zip" -OutFile stackql-deploy.zip
+Expand-Archive stackql-deploy.zip -DestinationPath .
+Move-Item stackql-deploy.exe "$env:LOCALAPPDATA\Microsoft\WindowsApps\"
+Remove-Item stackql-deploy.zip
 ```
 
-**Or download the MSI installer:**
+**WSL / Git Bash:**
 
-Download the latest `.msi` installer from the [GitHub Releases](https://github.com/stackql-labs/stackql-deploy-rs/releases) page.
+```bash
+curl -L -o stackql-deploy.zip https://github.com/stackql/stackql-deploy-rs/releases/latest/download/stackql-deploy-windows-x86_64.zip
+unzip stackql-deploy.zip
+```
+
+</TabItem>
+<TabItem value="cargo" label="Cargo (from source)">
+
+If you have Rust installed (via [rustup](https://rustup.rs/)):
+
+```bash
+cargo install stackql-deploy
+```
+
+This builds from source and installs to `~/.cargo/bin/`.
+
+</TabItem>
+<TabItem value="github-actions" label="GitHub Actions">
+
+Use the [`stackql/setup-deploy`](https://github.com/marketplace/actions/stackql-deploy) action to install and run `stackql-deploy` in your CI/CD pipelines:
+
+```yaml
+steps:
+  - uses: actions/checkout@v4
+
+  - name: Deploy Stack
+    uses: stackql/setup-deploy@v1.0.1
+    with:
+      command: 'build'
+      stack_dir: 'examples/aws/aws-vpc-webserver'
+      stack_env: 'dev'
+      env_vars: 'AWS_REGION=us-east-1'
+```
+
+The action automatically downloads the latest binary for the runner's platform. See [__Deploying with GitHub Actions__](/github-actions) for the full reference.
 
 </TabItem>
 </Tabs>
 
-For more installation options, see the [__GitHub Releases__](https://github.com/stackql-labs/stackql-deploy-rs/releases) page.
+All platform binaries are available on the [__GitHub Releases__](https://github.com/stackql/stackql-deploy-rs/releases) page.
 
 ## How `stackql-deploy` works
 
-The core components of `stackql-deploy` are the __stack directory__, the `stackql_manifest.yml` file and resource query (`.iql`) files. These files define your infrastructure and guide the deployment process.  
+The core components of `stackql-deploy` are the __stack directory__, the `stackql_manifest.yml` file and resource query (`.iql`) files. These files define your infrastructure and guide the deployment process.
 
 `stackql-deploy` uses the `stackql_manifest.yml` file in the `stack-dir`, to render query templates (`.iql` files) in the `resources` sub directory of the `stack-dir`, targeting an environment (`stack-env`).  `stackql` is used to execute the queries to deploy, test, update or delete resources as directed.  This is summarized in the diagram below:
 
@@ -81,7 +128,7 @@ flowchart LR
 
 ### `stackql_manifest.yml` File
 
-The `stackql_manifest.yml` file is the basis of your stack configuration. It contains the definitions of the resources you want to manage, the providers you're using (such as AWS, Google Cloud, or Azure), and the environment-specific settings that will guide the deployment.  
+The `stackql_manifest.yml` file is the basis of your stack configuration. It contains the definitions of the resources you want to manage, the providers you're using (such as AWS, Google Cloud, or Azure), and the environment-specific settings that will guide the deployment.
 
 This manifest file acts as a blueprint for your infrastructure, describing the resources and how they should be configured.  An example `stackql_manifest.yml` file is shown here:
 
@@ -111,7 +158,7 @@ resources:
       - name: resource_group_name
         value: "{{ stack_name }}-{{ stack_env }}-rg"
     exports:
-      - resource_group_name  
+      - resource_group_name
 ```
 
 </File>
