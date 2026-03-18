@@ -21,7 +21,10 @@ pub fn catch_error_and_exit(msg: &str) -> ! {
     error!("{}", msg);
     // Stop the local server before exiting to avoid stale sessions
     crate::utils::server::stop_local_server();
-    eprintln!("stackql-deploy operation failed");
+    crate::utils::display::print_unicode_box(
+        "stackql-deploy operation failed",
+        crate::utils::display::BorderColor::Red,
+    );
     process::exit(1);
 }
 

@@ -78,7 +78,11 @@ pub fn execute(matches: &ArgMatches) {
         &format!("{:?}", on_failure_val),
     );
 
-    println!("teardown complete (dry run: {})", is_dry_run);
+    if is_dry_run {
+        print_unicode_box("dry-run teardown complete", BorderColor::Green);
+    } else {
+        print_unicode_box("teardown complete", BorderColor::Green);
+    }
 
     stop_local_server();
 }

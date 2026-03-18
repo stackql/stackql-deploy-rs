@@ -90,9 +90,9 @@ pub fn execute(matches: &ArgMatches) {
     );
 
     if is_dry_run {
-        println!("dry-run build complete");
+        print_unicode_box("dry-run build complete", BorderColor::Green);
     } else {
-        println!("build complete");
+        print_unicode_box("build complete", BorderColor::Green);
     }
 
     stop_local_server();
@@ -239,14 +239,19 @@ fn run_build(
         // this.* fields into full_context.
         let mut exports_query_str: Option<String> = None;
 
-        // Handle query type with no exports
-        if res_type == "query" && exports_query_str.is_none() {
+        // Handle query type: render exports eagerly (query types don't
+        // have exists/statecheck so there's no this.* deferral needed).
+        if res_type == "query" {
             if let Some(ref iq) = inline_query {
                 exports_query_str = Some(iq.clone());
             } else {
-                catch_error_and_exit(
-                    "Inline sql must be supplied or an iql file must be present with an 'exports' anchor for query type resources.",
-                );
+                exports_query_str =
+                    render_exports!(runner, resource_queries, resource, &full_context);
+                if exports_query_str.is_none() {
+                    catch_error_and_exit(
+                        "Inline sql must be supplied or an iql file must be present with an 'exports' anchor for query type resources.",
+                    );
+                }
             }
         }
 

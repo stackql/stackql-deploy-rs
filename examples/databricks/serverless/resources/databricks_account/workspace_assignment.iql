@@ -1,0 +1,30 @@
+/*+ createorupdate */
+REPLACE databricks_account.iam.workspace_assignment
+SET 
+permissions = '["ADMIN"]'
+WHERE 
+account_id = '{{ databricks_account_id }}'
+AND workspace_id = '{{ workspace_id }}'
+AND principal_id = '{{ databricks_group_id }}'
+RETURNING
+error,
+permissions,
+principal;
+
+
+/*+ statecheck, retries=5, retry_delay=10 */
+SELECT COUNT(*) as count
+FROM databricks_account.iam.workspace_assignment
+WHERE
+account_id = '{{ databricks_account_id }}'
+AND workspace_id = '{{ workspace_id }}'
+AND JSON_EXTRACT(principal, '$.principal_id') = {{ databricks_group_id }}
+AND permissions LIKE '%ADMIN%';
+
+
+/*+ delete */
+DELETE FROM databricks_account.iam.workspace_assignment
+WHERE account_id = '{{ databricks_account_id }}'
+AND workspace_id = '{{ workspace_id }}'
+AND principal_id = '{{ databricks_group_id }}'
+;

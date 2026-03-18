@@ -89,7 +89,11 @@ pub fn execute(matches: &ArgMatches) {
         output_file.map(|s| s.as_str()),
     );
 
-    println!("tests complete (dry run: {})", is_dry_run);
+    if is_dry_run {
+        print_unicode_box("dry-run tests complete", BorderColor::Green);
+    } else {
+        print_unicode_box("tests complete", BorderColor::Green);
+    }
 
     stop_local_server();
 }

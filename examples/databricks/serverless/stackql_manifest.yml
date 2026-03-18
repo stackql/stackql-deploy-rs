@@ -288,22 +288,23 @@ resources:
       - databricks_group_id
       - display_name
 
-  # - name: databricks_account/get_users
-  #   type: query
-  #   props:
-  #   - name: users
-  #     value: 
-  #       - "javen@stackql.io"
-  #       - "krimmer@stackql.io"
-  #   exports:
-  #     - databricks_workspace_group_members  
+  - name: get_databricks_users
+    file: databricks_account/get_users.iql
+    type: query
+    props:
+    - name: users
+      value: 
+        - "javen@stackql.io"
+        - "krimmer@stackql.io"
+    exports:
+      - databricks_workspace_group_members  
 
-  # - name: databricks_account/update_group_membership
-  #   type: command
-  #   props: []
+  - name: databricks_account/update_group_membership
+    type: command
+    props: []
 
-  # - name: databricks_account/workspace_permission_assignments
-  #   props: []
+  - name: databricks_account/workspace_assignment
+    props: []
 
   # - name: databricks_workspace/storage_credential
   #   props:

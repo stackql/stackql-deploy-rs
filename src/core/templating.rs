@@ -294,8 +294,7 @@ pub fn render_query(
     let expanded = match preprocess_this_prefix(template, res_name) {
         Ok(t) => t,
         Err(e) => {
-            error!("[{}] [{}] {}", res_name, anchor, e);
-            process::exit(1);
+            crate::core::utils::catch_error_and_exit(&format!("[{}] [{}] {}", res_name, anchor, e));
         }
     };
 
@@ -348,7 +347,10 @@ pub fn render_query(
                 ctx.keys().collect::<Vec<_>>()
             );
 
-            process::exit(1);
+            crate::core::utils::catch_error_and_exit(&format!(
+                "Failed to render query for [{}] [{}]",
+                res_name, anchor
+            ));
         }
     }
 }
