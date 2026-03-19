@@ -154,7 +154,7 @@ jobs:
           lipo -create arm64/stackql-deploy x86_64/stackql-deploy \
             -output stackql-deploy
           tar -czf stackql-deploy-macos-universal.tar.gz stackql-deploy
-      - uses: actions/upload-artifact@v8
+      - uses: actions/upload-artifact@v7
         with:
           name: stackql-deploy-macos-universal
           path: stackql-deploy-macos-universal.tar.gz
