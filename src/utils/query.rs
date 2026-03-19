@@ -67,16 +67,14 @@ pub fn execute_query(query: &str, client: &mut PgwireLite) -> Result<QueryResult
                 .map(|row_map| {
                     let values: Vec<String> = columns
                         .iter()
-                        .map(|col| {
-                            match row_map.get(&col.name) {
-                                Some(Value::String(s)) => s.clone(),
-                                Some(Value::Null) => "NULL".to_string(),
-                                Some(Value::Bool(b)) => b.to_string(),
-                                Some(Value::Integer(i)) => i.to_string(),
-                                Some(Value::Float(f)) => f.to_string(),
-                                Some(_) => "UNKNOWN_TYPE".to_string(), // For any future value types
-                                None => "NULL".to_string(),
-                            }
+                        .map(|col| match row_map.get(&col.name) {
+                            Some(Value::String(s)) => s.clone(),
+                            Some(Value::Null) => "NULL".to_string(),
+                            Some(Value::Bool(b)) => b.to_string(),
+                            Some(Value::Integer(i)) => i.to_string(),
+                            Some(Value::Float(f)) => f.to_string(),
+                            Some(_) => "UNKNOWN_TYPE".to_string(),
+                            None => "NULL".to_string(),
                         })
                         .collect();
 

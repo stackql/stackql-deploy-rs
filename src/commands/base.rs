@@ -383,7 +383,11 @@ impl CommandRunner {
                 retries,
                 retry_delay,
             );
-            debug!("Create response: {}", msg);
+            if msg.is_empty() && returning_row.is_none() {
+                debug!("Create response: no response");
+            } else {
+                debug!("Create response: {}", msg);
+            }
             (true, returning_row)
         } else {
             let msg = run_stackql_command(
@@ -393,7 +397,11 @@ impl CommandRunner {
                 retries,
                 retry_delay,
             );
-            debug!("Create response: {}", msg);
+            if msg.is_empty() {
+                debug!("Create response: no response");
+            } else {
+                debug!("Create response: {}", msg);
+            }
             (true, None)
         }
     }
@@ -442,7 +450,11 @@ impl CommandRunner {
                         retries,
                         retry_delay,
                     );
-                    debug!("Update response: {}", msg);
+                    if msg.is_empty() && returning_row.is_none() {
+                        debug!("Update response: no response");
+                    } else {
+                        debug!("Update response: {}", msg);
+                    }
                     (true, returning_row)
                 } else {
                     let msg = run_stackql_command(
@@ -452,7 +464,11 @@ impl CommandRunner {
                         retries,
                         retry_delay,
                     );
-                    debug!("Update response: {}", msg);
+                    if msg.is_empty() {
+                        debug!("Update response: no response");
+                    } else {
+                        debug!("Update response: {}", msg);
+                    }
                     (true, None)
                 }
             }

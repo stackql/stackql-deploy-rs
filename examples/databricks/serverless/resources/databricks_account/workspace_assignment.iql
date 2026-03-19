@@ -5,7 +5,7 @@ permissions = '["ADMIN"]'
 WHERE 
 account_id = '{{ databricks_account_id }}'
 AND workspace_id = '{{ workspace_id }}'
-AND principal_id = '{{ databricks_group_id }}'
+AND principal_id = {{ databricks_group_id }}
 RETURNING
 error,
 permissions,
@@ -26,5 +26,5 @@ AND permissions LIKE '%ADMIN%';
 DELETE FROM databricks_account.iam.workspace_assignment
 WHERE account_id = '{{ databricks_account_id }}'
 AND workspace_id = '{{ workspace_id }}'
-AND principal_id = '{{ databricks_group_id }}'
+AND principal_id = {{ databricks_group_id }}
 ;

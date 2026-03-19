@@ -166,7 +166,20 @@ impl PgwireLite {
                     notices.push(parse_notice_fields(&data));
                 }
                 b'E' => {
-                    return Err(parse_error_fields(&data));
+                    // Capture the error but DON'T return yet — we must
+                    // drain the stream until ReadyForQuery ('Z') so the
+                    // connection is left in a clean state for the next query.
+                    let err_msg = parse_error_fields(&data);
+                    // Continue reading until ReadyForQuery
+                    loop {
+                        let drain_type = self.read_byte()?;
+                        let drain_len = self.read_i32()? as usize;
+                        let _drain_data = self.read_bytes(drain_len.saturating_sub(4))?;
+                        if drain_type == b'Z' {
+                            break;
+                        }
+                    }
+                    return Err(err_msg);
                 }
                 b'I' => {}     // EmptyQueryResponse
                 b'Z' => break, // ReadyForQuery — done

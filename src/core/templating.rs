@@ -286,11 +286,6 @@ pub fn render_query(
 ) -> String {
     let temp_context = prepare_query_context(context);
 
-    debug!(
-        "[{}] [{}] query template:\n\n{}\n",
-        res_name, anchor, template
-    );
-
     let expanded = match preprocess_this_prefix(template, res_name) {
         Ok(t) => t,
         Err(e) => {
@@ -306,7 +301,7 @@ pub fn render_query(
     match engine.render_with_filters(&template_name, &processed_query, &ctx) {
         Ok(rendered) => {
             debug!(
-                "[{}] [{}] rendered query:\n\n{}\n",
+                "Rendered [{}] [{}] query:\n\n{}\n",
                 res_name, anchor, rendered
             );
             rendered
@@ -379,7 +374,7 @@ pub fn try_render_query(
     match engine.render_with_filters(&template_name, &processed_query, &ctx) {
         Ok(rendered) => {
             debug!(
-                "[{}] [{}] rendered query:\n\n{}\n",
+                "Rendered [{}] [{}] query:\n\n{}\n",
                 res_name, anchor, rendered
             );
             Some(rendered)

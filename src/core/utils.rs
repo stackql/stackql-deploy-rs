@@ -11,7 +11,7 @@ use std::process;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 
 use crate::utils::pgwire::PgwireLite;
 use crate::utils::query::{execute_query, QueryResult};
@@ -42,12 +42,6 @@ pub fn run_stackql_query(
     let mut last_error: Option<String> = None;
 
     while attempt <= retries {
-        debug!(
-            "Executing stackql query on attempt {}:\n\n{}\n",
-            attempt + 1,
-            query
-        );
-
         match execute_query(query, client) {
             Ok(result) => match result {
                 QueryResult::Data {
@@ -69,7 +63,7 @@ pub fn run_stackql_query(
                     }
 
                     if rows.is_empty() {
-                        debug!("Stackql query executed successfully, retrieved 0 items.\n\nresults:\n\n[]\n");
+                        debug!("Query returned no results");
                         if attempt < retries {
                             thread::sleep(Duration::from_secs(delay as u64));
                             attempt += 1;
@@ -149,7 +143,7 @@ pub fn run_stackql_query(
                     return Vec::new();
                 }
                 QueryResult::Empty => {
-                    debug!("Empty result from query");
+                    debug!("Query returned no results");
                     if attempt < retries {
                         thread::sleep(Duration::from_secs(delay as u64));
                         attempt += 1;
@@ -160,15 +154,12 @@ pub fn run_stackql_query(
             },
             Err(e) => {
                 last_error = Some(e.clone());
-                if attempt == retries {
-                    if !suppress_errors {
-                        catch_error_and_exit(&format!(
-                            "Exception during stackql query execution:\n\n{}\n",
-                            e
-                        ));
-                    }
-                } else {
-                    error!("Exception on attempt {}:\n\n{}\n", attempt + 1, e);
+                debug!("Query error on attempt {}: {}", attempt + 1, e);
+                if attempt == retries && !suppress_errors {
+                    catch_error_and_exit(&format!(
+                        "Exception during stackql query execution:\n\n{}\n",
+                        e
+                    ));
                 }
             }
         }
@@ -176,11 +167,6 @@ pub fn run_stackql_query(
         thread::sleep(Duration::from_secs(delay as u64));
         attempt += 1;
     }
-
-    debug!(
-        "All attempts ({}) to execute the query completed.",
-        retries + 1
-    );
 
     // If suppress_errors and we have an error, return error marker
     if suppress_errors {
@@ -223,57 +209,54 @@ pub fn run_stackql_command(
     };
 
     while attempt <= retries {
-        debug!(
-            "Executing stackql command (attempt {}):\n\n{}\n",
-            attempt + 1,
-            processed_command
-        );
-
         match execute_query(&processed_command, client) {
-            Ok(result) => match result {
-                QueryResult::Data { notices, .. } => {
-                    // Check for errors in notices
-                    for notice in &notices {
-                        if error_detected_in_notice(notice) && !ignore_errors {
-                            if attempt < retries {
-                                warn!(
-                                        "Dependent resource(s) may not be ready, retrying in {} seconds (attempt {} of {})...",
-                                        retry_delay, attempt + 1, retries + 1
+            Ok(result) => {
+                match result {
+                    QueryResult::Data { notices, .. } => {
+                        // Check for errors in notices
+                        for notice in &notices {
+                            if error_detected_in_notice(notice) && !ignore_errors {
+                                if attempt < retries {
+                                    debug!(
+                                        "Command notice on attempt {}/{}, retrying in {} seconds: {}",
+                                        attempt + 1, retries + 1, retry_delay, notice
                                     );
-                                thread::sleep(Duration::from_secs(retry_delay as u64));
-                                attempt += 1;
-                                continue;
-                            } else {
-                                catch_error_and_exit(&format!(
-                                    "Error during stackql command execution:\n\n{}\n",
-                                    notice
-                                ));
+                                    thread::sleep(Duration::from_secs(retry_delay as u64));
+                                    attempt += 1;
+                                    continue;
+                                } else {
+                                    catch_error_and_exit(&format!(
+                                        "Error during stackql command execution:\n\n{}\n",
+                                        notice
+                                    ));
+                                }
                             }
                         }
+                        let msg = notices.join("\n");
+                        if !msg.is_empty() {
+                            debug!("Stackql command executed successfully:\n\n{}\n", msg);
+                        }
+                        return msg;
                     }
-                    let msg = notices.join("\n");
-                    if !msg.is_empty() {
+                    QueryResult::Command(msg) => {
                         debug!("Stackql command executed successfully:\n\n{}\n", msg);
+                        return msg;
                     }
-                    return msg;
+                    QueryResult::Empty => {
+                        debug!("Command executed with empty result");
+                        return String::new();
+                    }
                 }
-                QueryResult::Command(msg) => {
-                    debug!("Stackql command executed successfully:\n\n{}\n", msg);
-                    return msg;
-                }
-                QueryResult::Empty => {
-                    debug!("Command executed with empty result");
-                    return String::new();
-                }
-            },
+            }
             Err(e) => {
                 if !ignore_errors {
                     if attempt < retries {
-                        warn!(
-                            "Command failed, retrying in {} seconds (attempt {} of {})...",
-                            retry_delay,
+                        debug!(
+                            "Command returned error on attempt {}/{}, retrying in {} seconds: {}",
                             attempt + 1,
-                            retries + 1
+                            retries + 1,
+                            retry_delay,
+                            e
                         );
                         thread::sleep(Duration::from_secs(retry_delay as u64));
                         attempt += 1;
@@ -715,12 +698,6 @@ pub fn run_stackql_dml_returning(
     let mut attempt = 0u32;
 
     while attempt <= retries {
-        debug!(
-            "Executing stackql DML (attempt {}):\n\n{}\n",
-            attempt + 1,
-            command
-        );
-
         match execute_query(command, client) {
             Ok(result) => match result {
                 QueryResult::Data {
@@ -733,9 +710,12 @@ pub fn run_stackql_dml_returning(
                     for notice in &notices {
                         if error_detected_in_notice(notice) && !ignore_errors {
                             if attempt < retries {
-                                warn!(
-                                    "DML error in notice, retrying in {} seconds (attempt {} of {})...",
-                                    retry_delay, attempt + 1, retries + 1
+                                debug!(
+                                    "DML notice on attempt {}/{}, retrying in {} seconds: {}",
+                                    attempt + 1,
+                                    retries + 1,
+                                    retry_delay,
+                                    notice
                                 );
                                 thread::sleep(Duration::from_secs(retry_delay as u64));
                                 attempt += 1;
@@ -781,11 +761,12 @@ pub fn run_stackql_dml_returning(
             Err(e) => {
                 if !ignore_errors {
                     if attempt < retries {
-                        warn!(
-                            "DML failed, retrying in {} seconds (attempt {} of {})...",
-                            retry_delay,
+                        debug!(
+                            "DML error on attempt {}/{}, retrying in {} seconds: {}",
                             attempt + 1,
-                            retries + 1
+                            retries + 1,
+                            retry_delay,
+                            e
                         );
                         thread::sleep(Duration::from_secs(retry_delay as u64));
                         attempt += 1;

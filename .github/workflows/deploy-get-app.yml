@@ -1,0 +1,22 @@
+name: Deploy get-app
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'get-app/**'
+
+jobs:
+  deploy:
+    name: Deploy to Deno Deploy
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: denoland/deployctl@v1
+        with:
+          project: stackql-deploy-get
+          entrypoint: get-app/main.ts

@@ -132,10 +132,38 @@ jobs:
           path: ${{ matrix.artifact-name }}.*
           if-no-files-found: error
 
+  universal-macos:
+    name: Universal macOS binary
+    needs: build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: stackql-deploy-macos-arm64
+          path: arm64
+      - uses: actions/download-artifact@v8
+        with:
+          name: stackql-deploy-macos-x86_64
+          path: x86_64
+      - name: Extract binaries
+        run: |
+          tar -xzf arm64/stackql-deploy-macos-arm64.tar.gz -C arm64
+          tar -xzf x86_64/stackql-deploy-macos-x86_64.tar.gz -C x86_64
+      - name: Create universal binary
+        run: |
+          lipo -create arm64/stackql-deploy x86_64/stackql-deploy \
+            -output stackql-deploy
+          tar -czf stackql-deploy-macos-universal.tar.gz stackql-deploy
+      - uses: actions/upload-artifact@v8
+        with:
+          name: stackql-deploy-macos-universal
+          path: stackql-deploy-macos-universal.tar.gz
+          if-no-files-found: error
+
   # Runtime smoke test on each platform before releasing
   runtime-test:
     name: Runtime Test (${{ matrix.os }})
-    needs: build
+    needs: [build, universal-macos]
     strategy:
       fail-fast: false
       matrix:
@@ -192,16 +220,17 @@ jobs:
 
   release:
     name: Create GitHub Release
-    needs: [build, runtime-test]
+    needs: [build, runtime-test, universal-macos]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Download all build artifacts
+      - uses: actions/checkout@v6
+      - name: Download selected build artifacts
         uses: actions/download-artifact@v8
         with:
           path: artifacts/
-          pattern: stackql-deploy-*
+          pattern: stackql-deploy-@(linux-*|windows-*|macos-universal)
       - name: Collect archives and generate SHA256SUMS
         run: |
           mkdir -p dist
@@ -209,6 +238,14 @@ jobs:
             -exec mv {} dist/ \;
           cd dist
           sha256sum * | tee SHA256SUMS
+      - name: Build release body
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          echo "## stackql-deploy ${GITHUB_REF_NAME}" > release-body.md
+          echo "" >> release-body.md
+          awk "/^## $VERSION/{found=1; next} found && /^## /{exit} found{print}" CHANGELOG.md >> release-body.md
+          echo "" >> release-body.md
+          cat .github/release-footer.md >> release-body.md
       - name: GH Release
         uses: softprops/action-gh-release@v2.6.0
         with:
@@ -219,68 +256,7 @@ jobs:
             dist/*.tar.gz
             dist/*.zip
             dist/SHA256SUMS
-          body: |
-            ## stackql-deploy ${{ github.ref_name }}
-
-            ### What's new
-
-            This release ships the **Rust rewrite** of `stackql-deploy` — a complete
-            ground-up reimplementation that replaces the original Python package.
-
-            Key improvements over the Python version:
-
-            - **Single self-contained binary** — no Python runtime, pip, or virtualenv required.
-              Drop the binary on any supported platform and run.
-            - **Faster startup and execution** — Rust compile-time optimisations mean commands
-              that previously took seconds to initialise now start instantly.
-            - **Smaller install footprint** — the stripped Linux x86_64 binary is under 10 MB;
-              no transitive Python dependencies to manage.
-            - **Statically linked on Linux** — works on any glibc >= 2.17 distro without
-              installing extra system libraries.
-            - **Native Windows and macOS ARM64 support** — pre-built for all five major targets
-              (see assets below).
-
-            ### Download
-
-            | Platform | Architecture | Asset |
-            |----------|--------------|-------|
-            | Linux    | x86_64       | `stackql-deploy-linux-x86_64.tar.gz` |
-            | Linux    | arm64        | `stackql-deploy-linux-arm64.tar.gz` |
-            | macOS    | Apple Silicon (arm64) | `stackql-deploy-macos-arm64.tar.gz` |
-            | macOS    | Intel (x86_64) | `stackql-deploy-macos-x86_64.tar.gz` |
-            | Windows  | x86_64       | `stackql-deploy-windows-x86_64.zip` |
-
-            Each archive contains a single binary named `stackql-deploy` (or
-            `stackql-deploy.exe` on Windows). Verify your download with `SHA256SUMS`.
-
-            ### Migrating from the Python package
-
-            If you are currently using the Python package on PyPI, please migrate to this
-            release. The Python package is now deprecated and will no longer receive updates:
-            https://crates.io/crates/stackql-deploy
-
-            The CLI interface is fully compatible — existing `stackql_manifest.yml` files and
-            project layouts work without modification.
-
-            ### Install (quick)
-
-            **Linux / macOS:**
-            ```sh
-            curl -sSL https://github.com/stackql/stackql-deploy/releases/download/${{ github.ref_name }}/stackql-deploy-linux-x86_64.tar.gz \
-              | tar -xz -C /usr/local/bin
-            ```
-
-            **Windows (PowerShell):**
-            ```powershell
-            Invoke-WebRequest -Uri https://github.com/stackql/stackql-deploy/releases/download/${{ github.ref_name }}/stackql-deploy-windows-x86_64.zip `
-              -OutFile stackql-deploy.zip
-            Expand-Archive stackql-deploy.zip -DestinationPath $env:LOCALAPPDATA\stackql-deploy
-            ```
-
-            Or install via `cargo`:
-            ```sh
-            cargo install stackql-deploy
-            ```
+          body_path: release-body.md
 
   # --no-verify skips the verification build that cargo publish runs by default.
   # That build fails because build.rs writes contributors.csv into the package
