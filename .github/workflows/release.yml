@@ -46,7 +46,7 @@ jobs:
           query_file_path: ci-scripts/get-contributors.iql
           query_output: csv
       - name: Save contributors CSV
-        run: echo "${{ steps.get-contributors.outputs.stackql-query-results }}" > contributors.csv
+        run: echo "${{ steps.get-contributors.outputs.stackql-query-results }}" | tail -n +2 > contributors.csv
       - name: Upload contributors artifact
         uses: actions/upload-artifact@v7
         with:

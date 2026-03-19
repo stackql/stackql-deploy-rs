@@ -7,5 +7,6 @@
 
 pub mod config;
 pub mod env;
+pub mod errors;
 pub mod templating;
 pub mod utils;

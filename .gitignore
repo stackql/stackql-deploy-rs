@@ -7,6 +7,7 @@ stackql*.pkg
 stackql_history.txt
 stackql.log
 stackql-zip
+stackql-deploy
 .env
 nohup.out
 contributors.csv
