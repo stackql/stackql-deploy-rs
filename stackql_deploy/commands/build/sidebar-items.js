@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["command","execute","run_build"]};
+window.SIDEBAR_ITEMS = {"fn":["command","execute","run_build"],"macro":["render_exports","render_statecheck"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["check_and_start_server","extract_port_from_cmdline","extract_port_from_ps","find_all_running_servers","get_server_pid","is_server_running","start_server","stop_server"],"struct":["RunningServer","StartServerOptions"]};
+window.SIDEBAR_ITEMS = {"fn":["check_and_start_server","extract_port_from_cmdline","extract_port_from_ps","find_all_running_servers","get_server_pid","is_server_running","start_server","stop_local_server","stop_server"],"struct":["RunningServer","StartServerOptions"]};

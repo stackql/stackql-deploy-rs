@@ -387,34 +387,49 @@
 <a href=#387 id=387 data-nosnippet>387</a>            <span class="string">"Host '{}' is local; checking if server is running on port {}..."</span>,
 <a href=#388 id=388 data-nosnippet>388</a>            host, port
 <a href=#389 id=389 data-nosnippet>389</a>        );
-<a href=#390 id=390 data-nosnippet>390</a>        <span class="kw">if </span>is_server_running(port) {
-<a href=#391 id=391 data-nosnippet>391</a>            <span class="macro">info!</span>(<span class="string">"Local server is already running on port {}."</span>, port);
-<a href=#392 id=392 data-nosnippet>392</a>        } <span class="kw">else </span>{
-<a href=#393 id=393 data-nosnippet>393</a>            <span class="macro">debug!</span>(
-<a href=#394 id=394 data-nosnippet>394</a>                <span class="string">"Server not detected on port {}; will attempt to start it."</span>,
+<a href=#390 id=390 data-nosnippet>390</a>        <span class="comment">// Always stop any existing server to ensure a clean session
+<a href=#391 id=391 data-nosnippet>391</a>        // with the current environment (auth creds, provider versions, etc.)
+<a href=#392 id=392 data-nosnippet>392</a>        </span><span class="kw">if </span>is_server_running(port) {
+<a href=#393 id=393 data-nosnippet>393</a>            <span class="macro">info!</span>(
+<a href=#394 id=394 data-nosnippet>394</a>                <span class="string">"Stopping existing server on port {} for clean session."</span>,
 <a href=#395 id=395 data-nosnippet>395</a>                port
 <a href=#396 id=396 data-nosnippet>396</a>            );
-<a href=#397 id=397 data-nosnippet>397</a>            <span class="macro">info!</span>(<span class="string">"Server not running. Starting server..."</span>);
-<a href=#398 id=398 data-nosnippet>398</a>
-<a href=#399 id=399 data-nosnippet>399</a>            <span class="kw">let </span>options = StartServerOptions {
-<a href=#400 id=400 data-nosnippet>400</a>                host: host.to_string(),
-<a href=#401 id=401 data-nosnippet>401</a>                port,
-<a href=#402 id=402 data-nosnippet>402</a>                ..Default::default()
-<a href=#403 id=403 data-nosnippet>403</a>            };
-<a href=#404 id=404 data-nosnippet>404</a>
-<a href=#405 id=405 data-nosnippet>405</a>            <span class="macro">debug!</span>(
-<a href=#406 id=406 data-nosnippet>406</a>                <span class="string">"StartServerOptions: host={}, port={}"</span>,
-<a href=#407 id=407 data-nosnippet>407</a>                options.host, options.port
-<a href=#408 id=408 data-nosnippet>408</a>            );
-<a href=#409 id=409 data-nosnippet>409</a>
-<a href=#410 id=410 data-nosnippet>410</a>            <span class="kw">if let </span><span class="prelude-val">Err</span>(e) = start_server(<span class="kw-2">&amp;</span>options) {
-<a href=#411 id=411 data-nosnippet>411</a>                <span class="macro">error!</span>(<span class="string">"Failed to start server: {}"</span>, e);
-<a href=#412 id=412 data-nosnippet>412</a>                process::exit(<span class="number">1</span>);
-<a href=#413 id=413 data-nosnippet>413</a>            }
+<a href=#397 id=397 data-nosnippet>397</a>            <span class="kw">if let </span><span class="prelude-val">Err</span>(e) = stop_server(port) {
+<a href=#398 id=398 data-nosnippet>398</a>                <span class="macro">warn!</span>(<span class="string">"Failed to stop existing server: {}"</span>, e);
+<a href=#399 id=399 data-nosnippet>399</a>            }
+<a href=#400 id=400 data-nosnippet>400</a>            <span class="comment">// Brief pause to allow the port to be released
+<a href=#401 id=401 data-nosnippet>401</a>            </span>thread::sleep(Duration::from_secs(<span class="number">1</span>));
+<a href=#402 id=402 data-nosnippet>402</a>        }
+<a href=#403 id=403 data-nosnippet>403</a>
+<a href=#404 id=404 data-nosnippet>404</a>        <span class="macro">info!</span>(<span class="string">"Starting server..."</span>);
+<a href=#405 id=405 data-nosnippet>405</a>        <span class="kw">let </span>options = StartServerOptions {
+<a href=#406 id=406 data-nosnippet>406</a>            host: host.to_string(),
+<a href=#407 id=407 data-nosnippet>407</a>            port,
+<a href=#408 id=408 data-nosnippet>408</a>            ..Default::default()
+<a href=#409 id=409 data-nosnippet>409</a>        };
+<a href=#410 id=410 data-nosnippet>410</a>
+<a href=#411 id=411 data-nosnippet>411</a>        <span class="kw">if let </span><span class="prelude-val">Err</span>(e) = start_server(<span class="kw-2">&amp;</span>options) {
+<a href=#412 id=412 data-nosnippet>412</a>            <span class="macro">error!</span>(<span class="string">"Failed to start server: {}"</span>, e);
+<a href=#413 id=413 data-nosnippet>413</a>            process::exit(<span class="number">1</span>);
 <a href=#414 id=414 data-nosnippet>414</a>        }
 <a href=#415 id=415 data-nosnippet>415</a>    } <span class="kw">else </span>{
 <a href=#416 id=416 data-nosnippet>416</a>        <span class="macro">debug!</span>(<span class="string">"Host '{}' is remote; skipping local server start."</span>, host);
 <a href=#417 id=417 data-nosnippet>417</a>        <span class="macro">info!</span>(<span class="string">"Using remote server {}:{}"</span>, host, port);
 <a href=#418 id=418 data-nosnippet>418</a>    }
 <a href=#419 id=419 data-nosnippet>419</a>}
+<a href=#420 id=420 data-nosnippet>420</a>
+<a href=#421 id=421 data-nosnippet>421</a><span class="doccomment">/// Stops the local server after an operation completes.
+<a href=#422 id=422 data-nosnippet>422</a>/// Called at the end of build, test, and teardown to ensure
+<a href=#423 id=423 data-nosnippet>423</a>/// the server doesn't linger with stale auth context.
+<a href=#424 id=424 data-nosnippet>424</a></span><span class="kw">pub fn </span>stop_local_server() {
+<a href=#425 id=425 data-nosnippet>425</a>    <span class="kw">let </span>host = server_host();
+<a href=#426 id=426 data-nosnippet>426</a>    <span class="kw">let </span>port = server_port();
+<a href=#427 id=427 data-nosnippet>427</a>
+<a href=#428 id=428 data-nosnippet>428</a>    <span class="kw">if </span>LOCAL_SERVER_ADDRESSES.contains(<span class="kw-2">&amp;</span>host) &amp;&amp; is_server_running(port) {
+<a href=#429 id=429 data-nosnippet>429</a>        <span class="macro">debug!</span>(<span class="string">"Stopping local server after operation."</span>);
+<a href=#430 id=430 data-nosnippet>430</a>        <span class="kw">if let </span><span class="prelude-val">Err</span>(e) = stop_server(port) {
+<a href=#431 id=431 data-nosnippet>431</a>            <span class="macro">warn!</span>(<span class="string">"Failed to stop server after operation: {}"</span>, e);
+<a href=#432 id=432 data-nosnippet>432</a>        }
+<a href=#433 id=433 data-nosnippet>433</a>    }
+<a href=#434 id=434 data-nosnippet>434</a>}
 </code></pre></div></section></main></body></html>
