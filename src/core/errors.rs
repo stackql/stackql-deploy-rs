@@ -62,13 +62,10 @@ pub fn check_fatal_error(error_msg: &str) -> Option<&'static str> {
     }
 
     // Then check for fatal patterns
-    for pattern in FATAL_ERROR_PATTERNS {
-        if error_msg.contains(pattern) {
-            return Some(pattern);
-        }
-    }
-
-    None
+    FATAL_ERROR_PATTERNS
+        .iter()
+        .find(|&&pattern| error_msg.contains(pattern))
+        .copied()
 }
 
 #[cfg(test)]

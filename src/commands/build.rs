@@ -824,6 +824,21 @@ fn run_build(
             }
         }
 
+        // If the resource has an exports anchor but we never resolved the query,
+        // that's a fatal error - variables that can't be resolved at this point
+        // indicate a missing dependency or misconfigured template.
+        if exports_query_str.is_none()
+            && resource_queries.contains_key("exports")
+            && !resource.exports.is_empty()
+            && !dry_run
+        {
+            catch_error_and_exit(&format!(
+                "exports query for [{}] could not be rendered - unresolved template variables. \
+                 Check that all referenced variables are defined in the manifest or exported by prior resources.",
+                resource.name
+            ));
+        }
+
         if !dry_run {
             if res_type == "resource" {
                 info!("successfully deployed {}", resource.name);

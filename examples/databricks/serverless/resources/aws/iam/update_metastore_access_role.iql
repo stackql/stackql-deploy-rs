@@ -1,5 +1,5 @@
 /*+ command */
-update aws.iam.roles 
+update awscc.iam.roles 
 set PatchDocument = string('{{ {
     "AssumeRolePolicyDocument": assume_role_policy_document
     } | generate_patch_document }}') 

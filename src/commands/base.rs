@@ -24,6 +24,7 @@ use crate::core::utils::{
 use crate::resource::manifest::{Manifest, Resource};
 use crate::resource::validation::validate_manifest;
 use crate::template::engine::TemplateEngine;
+use crate::utils::display::{print_unicode_box, BorderColor};
 use crate::utils::pgwire::PgwireLite;
 
 /// Core state for all command operations, equivalent to Python's StackQLBase.
@@ -644,7 +645,13 @@ impl CommandRunner {
 
         info!("running command...");
         show_query(show_queries, command_query);
-        run_stackql_command(command_query, &mut self.client, false, retries, retry_delay);
+        let result =
+            run_stackql_command(command_query, &mut self.client, false, retries, retry_delay);
+        if result.is_empty() {
+            debug!("Command response: no response");
+        } else {
+            debug!("Command response:\n\n{}\n", result);
+        }
     }
 
     /// Process exports for a resource.
@@ -909,20 +916,17 @@ impl CommandRunner {
         output_file: Option<&str>,
         elapsed_time: &str,
     ) {
-        let output_file = match output_file {
-            Some(f) => f,
-            None => return,
-        };
-
-        info!("Processing stack exports...");
-
         let manifest_exports = &self.manifest.exports;
 
+        if manifest_exports.is_empty() {
+            return;
+        }
+
         if dry_run {
-            let total_vars = manifest_exports.len() + 3; // +3 for stack_name, stack_env, elapsed_time
+            let total_vars = manifest_exports.len() + 3;
             info!(
-                "dry run: would export {} variables to {} (including automatic stack_name, stack_env, and elapsed_time)",
-                total_vars, output_file
+                "dry run: would export {} variables (including automatic stack_name, stack_env, and elapsed_time)",
+                total_vars
             );
             return;
         }
@@ -946,7 +950,6 @@ impl CommandRunner {
             }
 
             if let Some(value) = self.global_context.get(var_name) {
-                // Try to parse as JSON
                 if value.starts_with('[') || value.starts_with('{') {
                     if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(value) {
                         export_data.insert(var_name.clone(), parsed);
@@ -972,30 +975,92 @@ impl CommandRunner {
             serde_json::Value::String(elapsed_time.to_string()),
         );
 
-        // Ensure directory exists
-        if let Some(parent) = Path::new(output_file).parent() {
-            if !parent.as_os_str().is_empty() && !parent.exists() {
-                if let Err(e) = fs::create_dir_all(parent) {
-                    catch_error_and_exit(&format!(
-                        "Failed to create directory for output file: {}",
-                        e
-                    ));
+        // Display stack exports table
+        print_unicode_box("stack exports", BorderColor::Cyan);
+
+        // Build ASCII table
+        // Env var names: STACKQL_DEPLOY__<stack>__<env>__<var> (hyphens -> underscores)
+        let sanitize = |s: &str| s.replace('-', "_");
+        let prefix = format!(
+            "STACKQL_DEPLOY__{}__{}__",
+            sanitize(&self.stack_name),
+            sanitize(&self.stack_env)
+        );
+        let mut rows: Vec<(String, String)> = Vec::new();
+        let mut max_name_len = 8usize; // "variable" header
+        for (key, val) in &export_data {
+            let fq_name = format!("{}{}", prefix, sanitize(key));
+            let val_str = match val {
+                serde_json::Value::String(s) => s.clone(),
+                other => other.to_string(),
+            };
+            max_name_len = max_name_len.max(fq_name.len());
+            rows.push((fq_name, val_str));
+        }
+        let max_val_len = rows
+            .iter()
+            .map(|(_, v)| v.len())
+            .max()
+            .unwrap_or(5)
+            .clamp(5, 80); // cap value display width
+
+        let sep = format!(
+            "+-{}-+-{}-+",
+            "-".repeat(max_name_len),
+            "-".repeat(max_val_len)
+        );
+        println!("{}", sep);
+        println!(
+            "| {:<width_n$} | {:<width_v$} |",
+            "variable",
+            "value",
+            width_n = max_name_len,
+            width_v = max_val_len
+        );
+        println!("{}", sep);
+        for (name, val) in &rows {
+            let display_val = if val.len() > max_val_len {
+                format!("{}...", &val[..max_val_len - 3])
+            } else {
+                val.clone()
+            };
+            println!(
+                "| {:<width_n$} | {:<width_v$} |",
+                name,
+                display_val,
+                width_n = max_name_len,
+                width_v = max_val_len
+            );
+        }
+        println!("{}", sep);
+
+        // Set environment variables
+        for (name, val) in &rows {
+            std::env::set_var(name, val);
+        }
+        info!("{} variables exported as environment variables", rows.len());
+
+        // Write JSON file if --output-file was specified
+        if let Some(output_file) = output_file {
+            if let Some(parent) = Path::new(output_file).parent() {
+                if !parent.as_os_str().is_empty() && !parent.exists() {
+                    if let Err(e) = fs::create_dir_all(parent) {
+                        catch_error_and_exit(&format!(
+                            "Failed to create directory for output file: {}",
+                            e
+                        ));
+                    }
                 }
             }
-        }
 
-        // Write JSON file
-        let json = serde_json::Value::Object(export_data.clone());
-        match fs::write(output_file, serde_json::to_string_pretty(&json).unwrap()) {
-            Ok(_) => info!(
-                "Exported {} variables to {}",
-                export_data.len(),
-                output_file
-            ),
-            Err(e) => catch_error_and_exit(&format!(
-                "Failed to write exports file {}: {}",
-                output_file, e
-            )),
+            let json = serde_json::Value::Object(export_data);
+            match fs::write(output_file, serde_json::to_string_pretty(&json).unwrap()) {
+                Ok(_) => info!("Exports also written to {}", output_file),
+                Err(e) => catch_error_and_exit(&format!(
+                    "Failed to write exports file {}: {}",
+                    output_file, e
+                )),
+            }
         }
     }
 }

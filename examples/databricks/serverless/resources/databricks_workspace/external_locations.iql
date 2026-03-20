@@ -1,0 +1,53 @@
+/*+ exists */
+SELECT
+count(*) as count
+FROM databricks_workspace.catalog.external_locations
+WHERE name = '{{ name }}' 
+AND deployment_name = '{{ deployment_name }}'
+;
+
+/*+ create */
+INSERT INTO databricks_workspace.catalog.external_locations (
+name,
+url,
+credential_name,
+comment,
+read_only,
+skip_validation,
+deployment_name
+)
+SELECT 
+'{{ name }}',
+'{{ url }}',
+'{{ credential_name }}',
+'{{ comment }}',
+{{ read_only }},
+{{ skip_validation }},
+'{{ deployment_name }}'
+RETURNING *
+;
+
+/*+ update */
+UPDATE databricks_workspace.catalog.external_locations
+SET 
+comment = '{{ comment }}',
+credential_name = '{{ credential_name }}',
+read_only = {{ read_only }},
+skip_validation = {{ skip_validation }},
+url = '{{ url }}'
+WHERE name = '{{ name }}'
+AND deployment_name = '{{ deployment_name }}'
+RETURNING *;
+
+/*+ exports, retries=5, retry_delay=10 */
+SELECT name as external_location_name
+FROM databricks_workspace.catalog.external_locations
+WHERE deployment_name = '{{ deployment_name }}'
+AND name = '{{ name }}'
+;
+
+/*+ delete */
+DELETE FROM databricks_workspace.catalog.external_locations
+WHERE name = '{{ name }}' 
+AND deployment_name = '{{ deployment_name }}'
+RETURNING *;

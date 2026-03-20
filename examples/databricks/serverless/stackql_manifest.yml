@@ -306,90 +306,97 @@ resources:
   - name: databricks_account/workspace_assignment
     props: []
 
-  # - name: databricks_workspace/storage_credential
-  #   props:
-  #   - name: name
-  #     value: "{{ stack_name }}_{{ stack_env }}_storage_credential"
-  #   - name: comment
-  #     value: "Storage credential for {{ stack_name }} {{ stack_env }} metastore S3 access"
-  #   - name: read_only
-  #     value: false
-  #   - name: aws_iam_role
-  #     value:
-  #       role_arn: "{{ metastore_access_role_arn }}"
-  #   - name: skip_validation
-  #     value: false
-  #   exports:
-  #   - storage_credential_name
-  #   - storage_credential_external_id
+  - name: databricks_workspace/storage_credentials
+    props:
+    - name: name
+      value: "{{ stack_name }}_{{ stack_env }}_storage_credential"
+    - name: comment
+      value: "Storage credential for {{ stack_name }} {{ stack_env }} metastore S3 access"
+    - name: read_only
+      value: false
+    - name: aws_iam_role
+      value:
+        role_arn: "{{ aws_metastore_access_role.arn }}"
+    - name: skip_validation
+      value: false
+    exports:
+    - storage_credential_id
+    - storage_credential_name
+    - storage_credential_external_id
 
-  # - name: aws/iam/update_metastore_access_role
-  #   type: command
-  #   props:
-  #     - name: role_name
-  #       value: "{{ stack_name }}-{{ stack_env }}-metastore-role"
-  #     - name: assume_role_policy_document
-  #       value:
-  #         Version: "2012-10-17"
-  #         Statement:
-  #           - Effect: "Allow"
-  #             Principal:
-  #               AWS: 
-  #                 - "arn:aws:iam::414351767826:role/unity-catalog-prod-UCMasterRole-14S5ZJVKOTYTL"
-  #                 - "{{ metastore_access_role_arn }}"
-  #             Action: "sts:AssumeRole"
-  #             Condition:
-  #               StringEquals:
-  #                 sts:ExternalId: "{{ storage_credential_external_id }}"
+  - name: aws/iam/update_metastore_access_role
+    type: command
+    props:
+      - name: role_name
+        value: "{{ aws_metastore_access_role.role_name }}"
+      - name: assume_role_policy_document
+        value:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: "Allow"
+              Principal:
+                AWS: 
+                  - "arn:aws:iam::414351767826:role/unity-catalog-prod-UCMasterRole-14S5ZJVKOTYTL"
+                  - "{{ aws_metastore_access_role.arn }}"
+              Action: "sts:AssumeRole"
+              Condition:
+                StringEquals:
+                  sts:ExternalId: "{{ storage_credential_external_id }}"
   
-  # - name: databricks_workspace/unitycatalog/credential_grants
-  #   type: command
-  #   props: 
-  #     - name: privileges
-  #       value:
-  #         - "ALL_PRIVILEGES"
-  #         - "MANAGE"
-  #   sql: |
-  #     UPDATE databricks_workspace.unitycatalog.grants
-  #     SET changes = '[{"add": {{ privileges }},"principal": "{{ databricks_group_name }}"}]' 
-  #     WHERE full_name = '{{ storage_credential_name }}' AND
-  #     securable_type = 'storage_credential' AND
-  #     deployment_name = '{{ databricks_deployment_name }}';
+  - name: databricks_credential_grants
+    type: command
+    props: 
+      - name: privileges
+        value:
+          - "ALL_PRIVILEGES"
+          - "MANAGE"
+    sql: |
+      UPDATE databricks_workspace.catalog.grants
+      SET changes = '[{"add": {{ privileges }},"principal": "{{ workspace_admins_group.display_name }}"}]' 
+      WHERE full_name = '{{ storage_credential_name }}' AND
+      securable_type = 'storage_credential' AND
+      deployment_name = '{{ deployment_name }}'
+      RETURNING
+      privilege_assignments;
 
-  # - name: databricks_workspace/external_location
-  #   props:
-  #   - name: name
-  #     value: "{{ stack_name }}_{{ stack_env }}_external_location"
-  #   - name: comment
-  #     value: "External location for {{ stack_name }} {{ stack_env }} metastore S3 access"
-  #   - name: url
-  #     value: "s3://{{ aws_s3_metastore_bucket_name }}/unitycatalog/demo"
-  #   - name: credential_name
-  #     value: "{{ storage_credential_name }}"
-  #   - name: read_only
-  #     value: false
-  #   - name: skip_validation
-  #     value: false
-  #   exports:
-  #   - external_location_name
+  - name: external_location
+    file: databricks_workspace/external_locations.iql
+    props:
+    - name: name
+      value: "{{ stack_name }}_{{ stack_env }}_external_location"
+    - name: comment
+      value: "External location for {{ stack_name }} {{ stack_env }} metastore S3 access"
+    - name: url
+      value: "s3://{{ aws_s3_metastore_bucket.bucket_name }}/unitycatalog/demo"
+    - name: credential_name
+      value: "{{ storage_credential_name }}"
+    - name: read_only
+      value: false
+    - name: skip_validation
+      value: false
+    exports:
+    - external_location_name
 
-  # - name: databricks_workspace/unitycatalog/location_grants
-  #   type: command
-  #   props: 
-  #     - name: privileges
-  #       value:
-  #         - "ALL_PRIVILEGES"
-  #         - "MANAGE"
-  #   sql: |
-  #     UPDATE databricks_workspace.unitycatalog.grants
-  #     SET changes = '[{"add": {{ privileges }},"principal": "{{ databricks_group_name }}"}]' 
-  #     WHERE full_name = '{{ external_location_name }}' AND
-  #     securable_type = 'external_location' AND
-  #     deployment_name = '{{ databricks_deployment_name }}';
+  - name: databricks_workspace/unitycatalog/location_grants
+    type: command
+    props: 
+      - name: privileges
+        value:
+          - "ALL_PRIVILEGES"
+          - "MANAGE"
+    sql: |
+      UPDATE databricks_workspace.catalog.grants
+      SET changes = '[{"add": {{ privileges }},"principal": "{{ workspace_admins_group.display_name }}"}]' 
+      WHERE 
+      securable_type = 'external_location'
+      AND full_name = '{{ external_location_name }}'
+      AND deployment_name = '{{ deployment_name }}'
+      RETURNING
+      privilege_assignments;
 
-# exports:
-#   - databricks_workspace_name
-#   - databricks_workspace_id
-#   - databricks_deployment_name
-#   - databricks_workspace_status
-#   - databricks_workspace_url
+exports:
+  - workspace_name
+  - workspace_id
+  - deployment_name
+  - workspace_status
+  - workspace_url

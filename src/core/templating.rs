@@ -300,6 +300,17 @@ pub fn render_query(
     let template_name = format!("{}__{}", res_name, anchor);
     match engine.render_with_filters(&template_name, &processed_query, &ctx) {
         Ok(rendered) => {
+            // Check for unresolved template variables in the final rendered output
+            let unresolved_re = Regex::new(r"\{\{[^}]+\}\}").unwrap();
+            if let Some(m) = unresolved_re.find(&rendered) {
+                crate::core::utils::catch_error_and_exit(&format!(
+                    "Unresolved template variable in [{}] [{}]: '{}'\n\nRendered query:\n{}\n",
+                    res_name,
+                    anchor,
+                    m.as_str(),
+                    rendered
+                ));
+            }
             debug!(
                 "Rendered [{}] [{}] query:\n\n{}\n",
                 res_name, anchor, rendered
@@ -373,6 +384,15 @@ pub fn try_render_query(
     let template_name = format!("{}__{}", res_name, anchor);
     match engine.render_with_filters(&template_name, &processed_query, &ctx) {
         Ok(rendered) => {
+            // Check for unresolved template variables
+            let unresolved_re = Regex::new(r"\{\{[^}]+\}\}").unwrap();
+            if unresolved_re.is_match(&rendered) {
+                debug!(
+                    "Unresolved variables in [{}] [{}], deferring render",
+                    res_name, anchor
+                );
+                return None;
+            }
             debug!(
                 "Rendered [{}] [{}] query:\n\n{}\n",
                 res_name, anchor, rendered

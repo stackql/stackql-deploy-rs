@@ -227,7 +227,11 @@ pub fn run_stackql_command(
         match execute_query(&processed_command, client) {
             Ok(result) => {
                 match result {
-                    QueryResult::Data { notices, .. } => {
+                    QueryResult::Data {
+                        notices,
+                        columns,
+                        rows,
+                    } => {
                         // Check for errors in notices
                         for notice in &notices {
                             if error_detected_in_notice(notice) && !ignore_errors {
@@ -247,9 +251,31 @@ pub fn run_stackql_command(
                                 }
                             }
                         }
+                        // Log returned data (e.g. from RETURNING clause) at debug level
+                        if !rows.is_empty() {
+                            let col_names: Vec<&str> =
+                                columns.iter().map(|c| c.name.as_str()).collect();
+                            let result_maps: Vec<HashMap<String, String>> = rows
+                                .iter()
+                                .map(|row| {
+                                    col_names
+                                        .iter()
+                                        .enumerate()
+                                        .map(|(i, &name)| {
+                                            let val =
+                                                row.values.get(i).cloned().unwrap_or_default();
+                                            (name.to_string(), val)
+                                        })
+                                        .collect()
+                                })
+                                .collect();
+                            if let Ok(json) = serde_json::to_string_pretty(&result_maps) {
+                                debug!("Command returned data:\n\n{}\n", json);
+                            }
+                        }
                         let msg = notices.join("\n");
                         if !msg.is_empty() {
-                            debug!("Stackql command executed successfully:\n\n{}\n", msg);
+                            debug!("Command notices:\n\n{}\n", msg);
                         }
                         return msg;
                     }
