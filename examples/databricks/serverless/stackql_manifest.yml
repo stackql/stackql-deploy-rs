@@ -2,9 +2,9 @@ version: 1
 name: "stackql-serverless"
 description: creates a serverless databricks workspace
 providers:
-  - awscc
-  - databricks_account
-  - databricks_workspace
+  - awscc::v26.03.00379
+  - databricks_account::v26.03.00381
+  - databricks_workspace::v26.03.00381
 globals:
   - name: databricks_account_id
     description: databricks account id

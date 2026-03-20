@@ -2,7 +2,7 @@ version: 1
 name: "aws-vpc-webserver"
 description: Provisions a complete AWS networking stack (VPC, subnet, internet gateway, route table, security group) with an Apache web server EC2 instance.
 providers:
-  - awscc
+  - awscc::v26.03.00379
 globals:
   - name: region
     description: aws region

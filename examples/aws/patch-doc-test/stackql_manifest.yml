@@ -2,7 +2,7 @@ version: 1
 name: "patch-doc-test"
 description: Demonstrates the Cloud Control API update (PatchDocument) workflow using an S3 bucket - deploy, modify versioning config, re-deploy to apply the update.
 providers:
-  - awscc
+  - awscc::v26.03.00379
 globals:
   - name: region
     description: aws region
