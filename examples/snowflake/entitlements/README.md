@@ -15,7 +15,7 @@ __`stackql-deploy`__ is a stateless, declarative, SQL driven Infrastructure-as-C
 
 ## Prerequisites
 
-This example requires `stackql-deploy` to be installed using __`pip install stackql-deploy`__.  The host used to run `stackql-deploy` needs the necessary environment variables set to authenticate to your specific provider, in the case of the `snowflake` provider, `SNOWFLAKE_PAT` must be set, for more information on authentication to `snowflake` see the [`snowflake` provider documentation](https://snowflake.stackql.io/providers/snowflake).
+This example requires `stackql-deploy` to be installed. Pre-built binaries are available from the [releases page](https://github.com/stackql/stackql-deploy-rs/releases). See`stackql-deploy` ([releases](https://github.com/stackql/stackql-deploy-rs/releases))__.  The host used to run `stackql-deploy` needs the necessary environment variables set to authenticate to your specific provider, in the case of the `snowflake` provider, `SNOWFLAKE_PAT` must be set, for more information on authentication to `snowflake` see the [`snowflake` provider documentation](https://snowflake.stackql.io/providers/snowflake).
 
 ## Usage
 

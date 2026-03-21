@@ -16,51 +16,7 @@ Based upon the [Kubernetes the Hard Way](https://github.com/kelseyhightower/kube
 `stackql-deploy` is installed as a python based CLI using...
 
 ```bash
-pip install stackql-deploy
+install stackql-deploy from https://github.com/stackql/stackql-deploy-rs/releases
 # or
 pip3 install stackql-deploy
-```
-> __Note for macOS users__  
-> to install `stackql-deploy` in a virtual environment (which may be necessary on __macOS__), use the following:
-> ```bash
-> python3 -m venv myenv
-> source myenv/bin/activate
-> pip install stackql-deploy
-> ```
-
-## getting started with `stackql-deploy`
-
-Once installed, use the `init` command to scaffold a sample project directory to get started:
-
-```bash
-stackql-deploy init k8s-the-hard-way
-```
-
-this will create a directory named `k8s-the-hard-way` which can be updated for your stack, as you can see in this project.
-
-## deploying using `stackql-deploy`
-
-```bash
-export GOOGLE_CREDENTIALS=$(cat ./testcreds/k8s-the-hard-way-project-demo-service-account.json)
-# deploy a stack
-stackql-deploy build \
-examples/google/k8s-the-hard-way \
-dev \
--e GOOGLE_PROJECT=stackql-k8s-the-hard-way-demo \
---dry-run \
---log-level DEBUG
-
-# test a stack
-stackql-deploy test \
-examples/google/k8s-the-hard-way \
-dev \
--e GOOGLE_PROJECT=stackql-k8s-the-hard-way-demo \
---dry-run
-
-# teardown a stack
-stackql-deploy teardown \
-examples/google/k8s-the-hard-way \
-dev \
--e GOOGLE_PROJECT=stackql-k8s-the-hard-way-demo \
---dry-run
 ```

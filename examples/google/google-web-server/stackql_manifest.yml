@@ -68,6 +68,15 @@ resources:
         value: "{{ stack_name }}-{{ stack_env }}-ip"
     exports:
       - address
+  - name: get_web_server_code
+    type: query
+    props:
+      - name: web_server_code
+        value: '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Hello StackQL</title><style>body{font-family:Tahoma,sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background-color:#f0f0f0;text-align:center;}p{font-size:2em;font-weight:bold;}</style></head><body><p>Hello, StackQL!</p></body></html>'
+    sql: |
+      SELECT '{{ web_server_code | base64_encode }}' as web_server_code_base64
+    exports:
+      - web_server_code_base64
   - name: example_web_server
     props:
       - name: instance_name
@@ -98,16 +107,8 @@ resources:
       - name: metadata
         value:
           items:
-            - key: startup-script
-              value: |
-                #!/bin/bash
-                apt-get update
-                apt-get install -y apache2
-                systemctl start apache2
-                systemctl enable apache2
-                cat > /var/www/html/index.html << 'HTMLEOF'
-                <!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>StackQL on GCP</title><style>body {font-family: Tahoma, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #f0f0f0; text-align: center;} img {height: auto;} code {background-color: #e8e8e8; padding: 2px 6px; border-radius: 3px; font-weight: bold;} p {font-size: 1.5em; font-weight: bold;}</style></head><body><div><a href="https://github.com/stackql/stackql"><img src="https://stackql.io/img/stackql-logo-bold.png" alt="StackQL Logo"></a><p>Hello, <a href="https://crates.io/crates/stackql-deploy"><code>stackql-deploy</code></a> on GCP!</p></div></body></html>
-                HTMLEOF
+          - key: startup-script
+            value: "#!/bin/bash\\napt-get update\\napt-get install -y apache2\\nsystemctl start apache2\\nsystemctl enable apache2\\necho {{ web_server_code_base64 }} | base64 -d > /var/www/html/index.html\\n"
     exports:
       - instance_name
   - name: get_web_server_url

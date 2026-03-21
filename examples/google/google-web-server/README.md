@@ -43,21 +43,24 @@ flowchart LR
 - `stackql-deploy` installed ([releases](https://github.com/stackql/stackql-deploy-rs/releases))
 - Google Cloud credentials:
 
-  ```bash
-  export GOOGLE_CREDENTIALS=$(cat path/to/sa-key.json)
-  export GOOGLE_PROJECT=your-project-id
-  export GOOGLE_REGION=us-central1
-  export GOOGLE_ZONE=us-central1-a
-  ```
+```bash
+export GOOGLE_CREDENTIALS=$(cat path/to/sa-key.json)
+export GOOGLE_PROJECT=stackql-demo
+export GOOGLE_REGION=us-central1
+export GOOGLE_ZONE=us-central1-a
+ ```
 
 ## Usage
 
 ### Deploy
 
 ```bash
-stackql-deploy build examples/google/google-web-server dev
+target/release/stackql-deploy build \
+examples/google/google-web-server dev \
+-e GOOGLE_PROJECT=${GOOGLE_PROJECT} \
+-e GOOGLE_REGION=${GOOGLE_REGION} \
+-e GOOGLE_ZONE=${GOOGLE_ZONE}
 ```
-
 ### Test
 
 ```bash
