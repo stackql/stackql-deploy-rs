@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["config","env","templating","utils"]};
+window.SIDEBAR_ITEMS = {"mod":["config","env","errors","templating","utils"]};

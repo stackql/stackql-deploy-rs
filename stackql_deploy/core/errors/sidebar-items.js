@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["FATAL_ERROR_PATTERNS","NON_FATAL_OVERRIDES"],"fn":["check_fatal_error"]};
