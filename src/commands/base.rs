@@ -24,6 +24,7 @@ use crate::core::utils::{
 use crate::resource::manifest::{Manifest, Resource};
 use crate::resource::validation::validate_manifest;
 use crate::template::engine::TemplateEngine;
+use crate::utils::display::{print_unicode_box, BorderColor};
 use crate::utils::pgwire::PgwireLite;
 
 /// Core state for all command operations, equivalent to Python's StackQLBase.
@@ -237,9 +238,9 @@ impl CommandRunner {
 
         if delete_test {
             if exists {
-                info!("[{}] still exists", resource.name);
-            } else {
                 info!("[{}] confirmed deleted", resource.name);
+            } else {
+                info!("[{}] still exists after post-delete check", resource.name);
             }
         } else if exists {
             info!("[{}] exists", resource.name);
@@ -482,21 +483,32 @@ impl CommandRunner {
         }
     }
 
-    /// Delete a resource.
+    /// Delete a resource and confirm deletion with an interleaved
+    /// delete-check-retry loop.
     ///
-    /// Returns `Some(first_row)` when the delete query included `RETURNING *`
-    /// and the provider returned data; `None` otherwise.
+    /// When `delete_retries > 0` the loop is:
+    ///   1. Execute DELETE
+    ///   2. Run exists query — count==0 → done, count==1 → continue, else → error
+    ///   3. Wait `delete_retry_delay` seconds
+    ///   4. Run exists query again — count==0 → done, count==1 → re-delete
+    ///      ... repeat up to `delete_retries` times
+    ///
+    /// When `delete_retries == 0`: single delete + single check, no retry.
+    ///
+    /// Returns the RETURNING * row (if any) from the first successful delete.
     #[allow(clippy::too_many_arguments)]
-    pub fn delete_resource(
+    pub fn delete_and_confirm(
         &mut self,
         resource: &Resource,
         delete_query: &str,
-        retries: u32,
-        retry_delay: u32,
+        exists_query: &str,
+        delete_retries: u32,
+        delete_retry_delay: u32,
         dry_run: bool,
         show_queries: bool,
         ignore_errors: bool,
-    ) -> Option<HashMap<String, String>> {
+    ) -> (Option<HashMap<String, String>>, bool) {
+        // --- dry run path ---
         if dry_run {
             if has_returning_clause(delete_query) {
                 info!(
@@ -509,33 +521,190 @@ impl CommandRunner {
                     resource.name, delete_query
                 );
             }
-            return None;
+            return (None, true);
         }
 
-        info!("deleting [{}]...", resource.name);
-        show_query(show_queries, delete_query);
+        let mut returning_row: Option<HashMap<String, String>> = None;
 
-        if has_returning_clause(delete_query) {
-            let (msg, returning_row) = run_stackql_dml_returning(
-                delete_query,
+        // Helper closure: execute the DELETE statement once (no retries on the
+        // DML itself — retries are handled by the outer loop).
+        let execute_delete = |client: &mut crate::utils::pgwire::PgwireLite,
+                              query: &str,
+                              res_name: &str,
+                              sq: bool,
+                              ignore: bool| {
+            info!("deleting [{}]...", res_name);
+            show_query(sq, query);
+            if has_returning_clause(query) {
+                let (msg, row) = run_stackql_dml_returning(query, client, ignore, 0, 0);
+                debug!("Delete response: {}", msg);
+                row
+            } else {
+                let msg = run_stackql_command(query, client, ignore, 0, 0);
+                debug!("Delete response: {}", msg);
+                None
+            }
+        };
+
+        // Helper closure: run the exists query and return the count.
+        // Returns Ok(count) or Err(msg) for unexpected results.
+        let run_exists_count = |client: &mut crate::utils::pgwire::PgwireLite,
+                                query: &str,
+                                res_name: &str,
+                                sq: bool|
+         -> Result<i64, String> {
+            info!("running post-delete check for [{}]...", res_name);
+            show_query(sq, query);
+            let result = run_stackql_query(query, client, true, 0, 5);
+            if result.is_empty() {
+                return Ok(0); // no rows → resource gone
+            }
+            if result[0].contains_key("_stackql_deploy_error") || result[0].contains_key("error") {
+                return Ok(0); // error querying → treat as gone
+            }
+            if let Some(count_str) = result[0].get("count") {
+                if let Ok(count) = count_str.parse::<i64>() {
+                    return Ok(count);
+                }
+            }
+            // No count field — check if all field values are null/empty
+            // (resource gone) or any non-null value (resource still exists).
+            let row = &result[0];
+            let all_null = row.values().all(|v| v == "null" || v.is_empty());
+            if all_null {
+                Ok(0) // all null/empty → resource gone
+            } else {
+                Ok(1) // non-null value → resource still exists
+            }
+        };
+
+        // --- no-retry path: single delete + single check ---
+        if delete_retries == 0 {
+            let row = execute_delete(
                 &mut self.client,
-                ignore_errors,
-                retries,
-                retry_delay,
-            );
-            debug!("Delete response: {}", msg);
-            returning_row
-        } else {
-            let msg = run_stackql_command(
                 delete_query,
-                &mut self.client,
+                &resource.name,
+                show_queries,
                 ignore_errors,
-                retries,
-                retry_delay,
             );
-            debug!("Delete response: {}", msg);
-            None
+            if returning_row.is_none() {
+                returning_row = row;
+            }
+            match run_exists_count(&mut self.client, exists_query, &resource.name, show_queries) {
+                Ok(0) => {
+                    info!("[{}] confirmed deleted", resource.name);
+                    return (returning_row, true);
+                }
+                Ok(1) => {
+                    info!(
+                        "[{}] delete dispatched (resource may still be deleting asynchronously)",
+                        resource.name
+                    );
+                    return (returning_row, false);
+                }
+                Ok(n) => {
+                    catch_error_and_exit(&format!(
+                        "Post-delete exists query for [{}] returned count={} (expected 0 or 1). \
+                         This indicates a query or logic error.",
+                        resource.name, n
+                    ));
+                }
+                Err(msg) => {
+                    catch_error_and_exit(&msg);
+                }
+            }
         }
+
+        // --- retry path: interleaved delete + check loop ---
+        let start = std::time::Instant::now();
+
+        for attempt in 0..delete_retries {
+            // Step 1: execute DELETE
+            let row = execute_delete(
+                &mut self.client,
+                delete_query,
+                &resource.name,
+                show_queries,
+                ignore_errors,
+            );
+            if returning_row.is_none() {
+                returning_row = row;
+            }
+
+            // Step 2: immediate post-delete check
+            match run_exists_count(&mut self.client, exists_query, &resource.name, show_queries) {
+                Ok(0) => {
+                    info!("[{}] confirmed deleted", resource.name);
+                    return (returning_row, true);
+                }
+                Ok(1) => {
+                    let elapsed = start.elapsed().as_secs();
+                    info!(
+                        "[{}] still exists after delete, attempt {}/{} ({} seconds elapsed)",
+                        resource.name,
+                        attempt + 1,
+                        delete_retries,
+                        elapsed
+                    );
+                }
+                Ok(n) => {
+                    catch_error_and_exit(&format!(
+                        "Post-delete exists query for [{}] returned count={} (expected 0 or 1). \
+                         This indicates a query or logic error.",
+                        resource.name, n
+                    ));
+                }
+                Err(msg) => {
+                    catch_error_and_exit(&msg);
+                }
+            }
+
+            // Step 3: wait retry_delay
+            if delete_retry_delay > 0 {
+                info!(
+                    "[{}] waiting {} seconds before next attempt...",
+                    resource.name, delete_retry_delay
+                );
+                std::thread::sleep(std::time::Duration::from_secs(delete_retry_delay as u64));
+            }
+
+            // Step 4: check again after the delay (maybe it cleaned up)
+            match run_exists_count(&mut self.client, exists_query, &resource.name, show_queries) {
+                Ok(0) => {
+                    info!("[{}] confirmed deleted", resource.name);
+                    return (returning_row, true);
+                }
+                Ok(1) => {
+                    let elapsed = start.elapsed().as_secs();
+                    info!(
+                        "[{}] still exists after delay, attempt {}/{} ({} seconds elapsed), re-issuing delete...",
+                        resource.name,
+                        attempt + 1,
+                        delete_retries,
+                        elapsed
+                    );
+                    // Loop continues → next iteration will re-issue DELETE
+                }
+                Ok(n) => {
+                    catch_error_and_exit(&format!(
+                        "Post-delete exists query for [{}] returned count={} (expected 0 or 1). \
+                         This indicates a query or logic error.",
+                        resource.name, n
+                    ));
+                }
+                Err(msg) => {
+                    catch_error_and_exit(&msg);
+                }
+            }
+        }
+
+        // Exhausted all retries
+        let elapsed = start.elapsed().as_secs();
+        info!(
+            "[{}] delete could not be confirmed after {} attempts ({} seconds elapsed)",
+            resource.name, delete_retries, elapsed
+        );
+        (returning_row, false)
     }
 
     // -----------------------------------------------------------------------
@@ -644,7 +813,13 @@ impl CommandRunner {
 
         info!("running command...");
         show_query(show_queries, command_query);
-        run_stackql_command(command_query, &mut self.client, false, retries, retry_delay);
+        let result =
+            run_stackql_command(command_query, &mut self.client, false, retries, retry_delay);
+        if result.is_empty() {
+            debug!("Command response: no response");
+        } else {
+            debug!("Command response:\n\n{}\n", result);
+        }
     }
 
     /// Process exports for a resource.
@@ -909,20 +1084,17 @@ impl CommandRunner {
         output_file: Option<&str>,
         elapsed_time: &str,
     ) {
-        let output_file = match output_file {
-            Some(f) => f,
-            None => return,
-        };
-
-        info!("Processing stack exports...");
-
         let manifest_exports = &self.manifest.exports;
 
+        if manifest_exports.is_empty() {
+            return;
+        }
+
         if dry_run {
-            let total_vars = manifest_exports.len() + 3; // +3 for stack_name, stack_env, elapsed_time
+            let total_vars = manifest_exports.len() + 3;
             info!(
-                "dry run: would export {} variables to {} (including automatic stack_name, stack_env, and elapsed_time)",
-                total_vars, output_file
+                "dry run: would export {} variables (including automatic stack_name, stack_env, and elapsed_time)",
+                total_vars
             );
             return;
         }
@@ -946,7 +1118,6 @@ impl CommandRunner {
             }
 
             if let Some(value) = self.global_context.get(var_name) {
-                // Try to parse as JSON
                 if value.starts_with('[') || value.starts_with('{') {
                     if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(value) {
                         export_data.insert(var_name.clone(), parsed);
@@ -972,30 +1143,115 @@ impl CommandRunner {
             serde_json::Value::String(elapsed_time.to_string()),
         );
 
-        // Ensure directory exists
-        if let Some(parent) = Path::new(output_file).parent() {
-            if !parent.as_os_str().is_empty() && !parent.exists() {
-                if let Err(e) = fs::create_dir_all(parent) {
-                    catch_error_and_exit(&format!(
-                        "Failed to create directory for output file: {}",
-                        e
-                    ));
+        // Display stack exports table
+        print_unicode_box("stack exports", BorderColor::Cyan);
+
+        // Build ASCII table
+        // Env var names: STACKQL_DEPLOY__<stack>__<env>__<var> (hyphens -> underscores)
+        let sanitize = |s: &str| s.replace('-', "_");
+        let prefix = format!(
+            "STACKQL_DEPLOY__{}__{}__",
+            sanitize(&self.stack_name),
+            sanitize(&self.stack_env)
+        );
+        let mut rows: Vec<(String, String)> = Vec::new();
+        let mut max_name_len = 8usize; // "variable" header
+        for (key, val) in &export_data {
+            let fq_name = format!("{}{}", prefix, sanitize(key));
+            let val_str = match val {
+                serde_json::Value::String(s) => s.clone(),
+                other => other.to_string(),
+            };
+            max_name_len = max_name_len.max(fq_name.len());
+            rows.push((fq_name, val_str));
+        }
+        let max_val_len = rows
+            .iter()
+            .map(|(_, v)| v.len())
+            .max()
+            .unwrap_or(5)
+            .clamp(5, 80); // cap value display width
+
+        let sep = format!(
+            "+-{}-+-{}-+",
+            "-".repeat(max_name_len),
+            "-".repeat(max_val_len)
+        );
+        println!("{}", sep);
+        println!(
+            "| {:<width_n$} | {:<width_v$} |",
+            "variable",
+            "value",
+            width_n = max_name_len,
+            width_v = max_val_len
+        );
+        println!("{}", sep);
+        for (name, val) in &rows {
+            let display_val = if val.len() > max_val_len {
+                format!("{}...", &val[..max_val_len - 3])
+            } else {
+                val.clone()
+            };
+            println!(
+                "| {:<width_n$} | {:<width_v$} |",
+                name,
+                display_val,
+                width_n = max_name_len,
+                width_v = max_val_len
+            );
+        }
+        println!("{}", sep);
+
+        // Write sourceable exports file
+        let exports_file = ".stackql-deploy-exports";
+        let mut export_lines = Vec::new();
+        for (name, val) in &rows {
+            // Escape single quotes in values
+            let escaped = val.replace('\'', "'\\''");
+            export_lines.push(format!("export {}='{}'", name, escaped));
+        }
+        match fs::write(exports_file, export_lines.join("\n") + "\n") {
+            Ok(_) => {
+                info!("{} variables written to {}", rows.len(), exports_file);
+                println!();
+                println!("To load these variables into your shell:");
+                if cfg!(target_os = "windows") {
+                    println!(
+                        "  PowerShell:  Get-Content {} | ForEach-Object {{ Invoke-Expression $_ }}",
+                        exports_file
+                    );
+                    println!("  Git Bash:    source {}", exports_file);
+                } else {
+                    println!("  source {}", exports_file);
                 }
+                println!();
+            }
+            Err(e) => {
+                error!("Failed to write exports file {}: {}", exports_file, e);
             }
         }
 
-        // Write JSON file
-        let json = serde_json::Value::Object(export_data.clone());
-        match fs::write(output_file, serde_json::to_string_pretty(&json).unwrap()) {
-            Ok(_) => info!(
-                "Exported {} variables to {}",
-                export_data.len(),
-                output_file
-            ),
-            Err(e) => catch_error_and_exit(&format!(
-                "Failed to write exports file {}: {}",
-                output_file, e
-            )),
+        // Write JSON file if --output-file was specified
+        if let Some(output_file) = output_file {
+            if let Some(parent) = Path::new(output_file).parent() {
+                if !parent.as_os_str().is_empty() && !parent.exists() {
+                    if let Err(e) = fs::create_dir_all(parent) {
+                        catch_error_and_exit(&format!(
+                            "Failed to create directory for output file: {}",
+                            e
+                        ));
+                    }
+                }
+            }
+
+            let json = serde_json::Value::Object(export_data);
+            match fs::write(output_file, serde_json::to_string_pretty(&json).unwrap()) {
+                Ok(_) => info!("Exports also written to {}", output_file),
+                Err(e) => catch_error_and_exit(&format!(
+                    "Failed to write exports file {}: {}",
+                    output_file, e
+                )),
+            }
         }
     }
 }

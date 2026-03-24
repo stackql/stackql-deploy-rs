@@ -69,10 +69,9 @@ For extra credit, you can (asynchronously) delete the unnecessary workspace with
 Time to get down to business.  From the root of this repository:
 
 ```bash
-python3 -m venv myenv
 source examples/databricks/serverless/convenience.sh
 source venv/bin/activate
-pip install stackql-deploy
+install stackql-deploy from https://github.com/stackql/stackql-deploy-rs/releases
 ```
 
 > alternatively set the `AWS_REGION`, `AWS_ACCOUNT_ID`, `DATABRICKS_ACCOUNT_ID`, `DATABRICKS_AWS_ACCOUNT_ID` along with provider credentials `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `DATABRICKS_CLIENT_ID`, `DATABRICKS_CLIENT_SECRET`

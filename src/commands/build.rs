@@ -722,6 +722,14 @@ fn run_build(
                     }
                 }
 
+                // If exports wasn't rendered yet (e.g. no exists query to
+                // trigger it), try now — the context may already contain all
+                // the variables the exports template needs.
+                if exports_query_str.is_none() {
+                    exports_query_str =
+                        render_exports!(runner, resource_queries, resource, &full_context);
+                }
+
                 debug!(
                     "post-deploy for [{}]: is_correct_state={}, has_statecheck={}, exports_query_str={}",
                     resource.name,
@@ -822,6 +830,21 @@ fn run_build(
                     false,
                 );
             }
+        }
+
+        // If the resource has an exports anchor but we never resolved the query,
+        // that's a fatal error - variables that can't be resolved at this point
+        // indicate a missing dependency or misconfigured template.
+        if exports_query_str.is_none()
+            && resource_queries.contains_key("exports")
+            && !resource.exports.is_empty()
+            && !dry_run
+        {
+            catch_error_and_exit(&format!(
+                "exports query for [{}] could not be rendered - unresolved template variables. \
+                 Check that all referenced variables are defined in the manifest or exported by prior resources.",
+                resource.name
+            ));
         }
 
         if !dry_run {

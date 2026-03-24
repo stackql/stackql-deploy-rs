@@ -224,43 +224,26 @@ fn run_teardown(runner: &mut CommandRunner, dry_run: bool, show_queries: bool, _
         let resource_queries = runner.get_queries(resource, &full_context);
 
         // Get exists query (fallback to statecheck) - render JIT
-        let (
-            exists_query_str,
-            exists_retries,
-            exists_retry_delay,
-            _postdelete_retries,
-            _postdelete_retry_delay,
-        ) = if let Some(eq) = resource_queries.get("exists") {
-            let rendered =
-                runner.render_query(&resource.name, "exists", &eq.template, &full_context);
-            (
-                rendered,
-                eq.options.retries,
-                eq.options.retry_delay,
-                eq.options.postdelete_retries,
-                eq.options.postdelete_retry_delay,
-            )
-        } else if let Some(sq) = resource_queries.get("statecheck") {
-            info!(
-                "exists query not defined for [{}], trying statecheck query as exists query.",
-                resource.name
-            );
-            let rendered =
-                runner.render_query(&resource.name, "statecheck", &sq.template, &full_context);
-            (
-                rendered,
-                sq.options.retries,
-                sq.options.retry_delay,
-                sq.options.postdelete_retries,
-                sq.options.postdelete_retry_delay,
-            )
-        } else {
-            info!(
-                "No exists or statecheck query for [{}], skipping...",
-                resource.name
-            );
-            continue;
-        };
+        let (exists_query_str, exists_retries, exists_retry_delay) =
+            if let Some(eq) = resource_queries.get("exists") {
+                let rendered =
+                    runner.render_query(&resource.name, "exists", &eq.template, &full_context);
+                (rendered, eq.options.retries, eq.options.retry_delay)
+            } else if let Some(sq) = resource_queries.get("statecheck") {
+                info!(
+                    "exists query not defined for [{}], trying statecheck query as exists query.",
+                    resource.name
+                );
+                let rendered =
+                    runner.render_query(&resource.name, "statecheck", &sq.template, &full_context);
+                (rendered, sq.options.retries, sq.options.retry_delay)
+            } else {
+                info!(
+                    "No exists or statecheck query for [{}], skipping...",
+                    resource.name
+                );
+                continue;
+            };
 
         // Check if delete query template exists (don't render yet — may need
         // this.* fields from the exists check).
@@ -307,9 +290,10 @@ fn run_teardown(runner: &mut CommandRunner, dry_run: bool, show_queries: bool, _
 
         // Delete
         if resource_exists {
-            let returning_row = runner.delete_resource(
+            let (returning_row, delete_confirmed) = runner.delete_and_confirm(
                 resource,
                 &delete_query,
+                &exists_query_str,
                 delete_retries,
                 delete_retry_delay,
                 dry_run,
@@ -353,34 +337,18 @@ fn run_teardown(runner: &mut CommandRunner, dry_run: bool, show_queries: bool, _
                     );
                 }
             }
+
+            if delete_confirmed {
+                info!("successfully deleted {}", resource.name);
+            } else {
+                info!("[{}] delete could not be confirmed", resource.name);
+            }
         } else {
             info!(
                 "resource [{}] does not exist, skipping delete",
                 resource.name
             );
             continue;
-        }
-
-        // Confirm deletion - single check, don't poll excessively.
-        // Cloud Control deletes are async; if the resource is still
-        // visible on the first check that's expected, move on.
-        let (still_exists, _) = runner.check_if_resource_exists(
-            resource,
-            &exists_query_str,
-            1,
-            0,
-            dry_run,
-            show_queries,
-            true, // delete_test
-        );
-
-        if !still_exists {
-            info!("successfully deleted {}", resource.name);
-        } else {
-            info!(
-                "[{}] delete dispatched (resource may still be deleting asynchronously)",
-                resource.name
-            );
         }
     }
 

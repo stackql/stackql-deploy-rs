@@ -1,25 +1,65 @@
 **Type**: `array of strings` (optional)
 
-**Description**: List of variable names to export to a JSON file after deployment completion. Variables must exist in the deployment context (from globals or resource exports). Use with the `--output-file` CLI argument to specify the destination file.
+**Description**: List of variable names to export after a successful `build` or `test` operation. Variables must exist in the deployment context (from globals or resource exports). Exported variables are displayed in a table, written to a sourceable shell file (`.stackql-deploy-exports`), and optionally to a JSON file when `--output-file` is specified.
 
-**Usage**: Use this to extract key deployment outputs for use in CI/CD pipelines, downstream processes, or for record-keeping.
+**Usage**: Use this to extract key deployment outputs for use in CI/CD pipelines, downstream processes, or interactive shell sessions.
 
 **Example**:
 
 ```yaml
 exports:
-  - databricks_workspace_name
-  - databricks_workspace_id  
-  - aws_iam_role_arn
-  - deployment_timestamp
+  - workspace_name
+  - workspace_id
+  - deployment_name
+  - workspace_status
+  - workspace_url
 ```
+
+**Output after a successful `build` or `test`**:
+
+```
+┌───────────────┐
+│ stack exports │
+└───────────────┘
++------------------------------------------------------+--------------------------------------------------+
+| variable                                             | value                                            |
++------------------------------------------------------+--------------------------------------------------+
+| STACKQL_DEPLOY__my_stack__dev__workspace_name        | my-stack-dev-workspace                           |
+| STACKQL_DEPLOY__my_stack__dev__workspace_id          | 7474653260057820                                 |
+| STACKQL_DEPLOY__my_stack__dev__deployment_name       | dbc-c83e88ed-1ad3                                |
+| STACKQL_DEPLOY__my_stack__dev__workspace_status      | RUNNING                                          |
+| STACKQL_DEPLOY__my_stack__dev__workspace_url         | https://dbc-c83e88ed-1ad3.cloud.databricks.com   |
+| STACKQL_DEPLOY__my_stack__dev__elapsed_time          | 49.22s                                           |
+| STACKQL_DEPLOY__my_stack__dev__stack_env             | dev                                              |
+| STACKQL_DEPLOY__my_stack__dev__stack_name            | my-stack                                         |
++------------------------------------------------------+--------------------------------------------------+
+
+To load these variables into your shell:
+  source .stackql-deploy-exports
+```
+
+**Loading exports into the shell**:
+
+```bash
+# Linux / macOS / Git Bash
+source .stackql-deploy-exports
+echo $STACKQL_DEPLOY__my_stack__dev__workspace_url
+```
+
+```powershell
+# PowerShell
+Get-Content .stackql-deploy-exports | ForEach-Object { Invoke-Expression $_ }
+```
+
+**Environment variable naming**:
+
+Exported variable names follow the pattern `STACKQL_DEPLOY__<stack_name>__<stack_env>__<variable>`, where hyphens in stack name or env are replaced with underscores (since shell environment variables don't support hyphens).
 
 **Notes**:
 - `stack_name`, `stack_env`, and `elapsed_time` are automatically included in exports and do not need to be listed
-- Export order: automatic exports (`stack_name`, `stack_env`) first, then user-defined exports, then timing (`elapsed_time`) last
-- `elapsed_time` is formatted as a string showing the total deployment duration (e.g., "0:01:23.456789")
+- Stack exports are displayed on both `build` and `test` operations
+- The `.stackql-deploy-exports` file is written to the current working directory and contains `export KEY='value'` lines
+- If `--output-file` is also specified, exports are additionally written as a JSON file
 - Variables are exported exactly as they exist in the deployment context
-- Complex objects and arrays are preserved as JSON structures  
-- If a listed variable doesn't exist in the context, deployment will fail
-- Requires `--output-file` CLI argument to be specified, otherwise exports are skipped
-- Exported JSON file contains a flat object with variable names as keys
+- Complex objects and arrays are preserved as JSON structures
+- If a listed variable doesn't exist in the context, the operation will fail

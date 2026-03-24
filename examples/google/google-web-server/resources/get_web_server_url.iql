@@ -1,0 +1,2 @@
+/*+ exports */
+SELECT 'http://' || '{{ address }}' as web_server_url

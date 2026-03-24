@@ -1,0 +1,36 @@
+/*+ exists */
+SELECT COUNT(*) as count FROM google.compute.networks
+WHERE name = '{{ vpc_name }}'
+AND project = '{{ project }}'
+
+/*+ create */
+INSERT INTO google.compute.networks
+(
+ project,
+ name,
+ autoCreateSubnetworks,
+ routingConfig
+)
+SELECT
+ '{{ project }}',
+ '{{ vpc_name }}',
+ false,
+ '{"routingMode": "REGIONAL"}'
+
+/*+ statecheck, retries=5, retry_delay=10 */
+SELECT COUNT(*) as count FROM google.compute.networks
+WHERE name = '{{ vpc_name }}'
+AND project = '{{ project }}'
+AND autoCreateSubnetworks = false
+
+/*+ exports */
+SELECT
+ '{{ vpc_name }}' as vpc_name,
+ selfLink as vpc_link
+FROM google.compute.networks
+WHERE name = '{{ vpc_name }}'
+AND project = '{{ project }}'
+
+/*+ delete, retries=20, retry_delay=10 */
+DELETE FROM google.compute.networks
+WHERE network = '{{ vpc_name }}' AND project = '{{ project }}'

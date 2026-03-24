@@ -5,22 +5,17 @@ This example provisions a complete AWS networking stack with an Apache web serve
 ## Architecture
 
 ```mermaid
-architecture-beta
-    group vpc(logos:aws-vpc)[VPC 10.x.0.0/16]
-
-    service subnet(logos:aws-vpc)[Subnet 10.x.1.0/24] in vpc
-    service rt(logos:aws-route-53)[Route Table] in vpc
-    service sg(logos:aws-shield)[Security Group] in vpc
-    service ec2(logos:aws-ec2)[Web Server t2.micro] in vpc
-
-    group edge(logos:aws-cloudfront)[Edge]
-
-    service igw(logos:aws-api-gateway)[Internet Gateway] in edge
-
-    igw:R --> L:rt
-    rt:B -- T:subnet
-    sg:R -- L:ec2
-    subnet:T -- B:ec2
+flowchart LR
+    subgraph VPC["VPC 10.x.0.0/16"]
+        Subnet["Subnet\n10.x.1.0/24"]
+        RT["Route Table"]
+        SG["Security Group\nHTTP:80, SSH:22"]
+        EC2["Web Server\nt2.micro"]
+        Subnet --> EC2
+        SG --> EC2
+    end
+    IGW["Internet\nGateway"] --> RT --> Subnet
+    Internet(("Internet")) --> IGW
 ```
 
 ## Resources
@@ -62,37 +57,46 @@ architecture-beta
 ### Deploy
 
 ```bash
-stackql-deploy build examples/aws/aws-vpc-webserver dev
+target/release/stackql-deploy build examples/aws/aws-vpc-webserver dev \
+-e AWS_REGION=${AWS_REGION}
 ```
 
 With query visibility:
 
 ```bash
-stackql-deploy build examples/aws/aws-vpc-webserver dev --show-queries
+target/release/stackql-deploy build examples/aws/aws-vpc-webserver dev \
+-e AWS_REGION=${AWS_REGION} \
+--show-queries
 ```
 
 Dry run (no changes):
 
 ```bash
-stackql-deploy build examples/aws/aws-vpc-webserver dev --dry-run --show-queries
+target/release/stackql-deploy build examples/aws/aws-vpc-webserver dev \
+-e AWS_REGION=${AWS_REGION} \
+--dry-run --show-queries
 ```
 
 ### Test
 
 ```bash
-stackql-deploy test examples/aws/aws-vpc-webserver dev
+target/release/stackql-deploy test examples/aws/aws-vpc-webserver dev \
+-e AWS_REGION=${AWS_REGION}
 ```
 
 ### Teardown
 
 ```bash
-stackql-deploy teardown examples/aws/aws-vpc-webserver dev
+target/release/stackql-deploy teardown examples/aws/aws-vpc-webserver dev \
+-e AWS_REGION=${AWS_REGION}
 ```
 
 ### Debug mode
 
 ```bash
-stackql-deploy build examples/aws/aws-vpc-webserver dev --log-level debug
+target/release/stackql-deploy build examples/aws/aws-vpc-webserver dev \
+-e AWS_REGION=${AWS_REGION} \
+--log-level debug
 ```
 
 ## How It Works

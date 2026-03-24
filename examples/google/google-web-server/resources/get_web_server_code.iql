@@ -1,0 +1,2 @@
+/*+ exports */
+SELECT '{{ web_server_code | base64 }}' as web_server_code_base64

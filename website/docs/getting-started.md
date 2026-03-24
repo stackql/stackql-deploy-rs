@@ -10,44 +10,42 @@ unlisted: false
 ---
 
 import File from '/src/components/File';
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
 
 `stackql-deploy` is a model driven, declarative framework for provisioning, de-provisioning and testing cloud resources.  Heard enough and ready to get started? Jump to a [__Quick Start__](#quick-start).
 
 ## Installing `stackql-deploy`
 
-`stackql-deploy` is distributed as a standalone binary with no runtime dependencies required.
-
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
+`stackql-deploy` is distributed as a standalone binary with no runtime dependencies required.  You can also download directly from your browser at [__get-stackql-deploy.io__](https://get-stackql-deploy.io).
 
 <Tabs>
-<TabItem value="macos" label="macOS">
+<TabItem value="linux-macos" label="Linux / macOS">
 
-**Apple Silicon (ARM64):**
+The canonical install URL detects your OS and redirects to the latest release asset automatically:
 
 ```bash
-curl -L https://github.com/stackql/stackql-deploy-rs/releases/latest/download/stackql-deploy-macos-arm64.tar.gz | tar xz
+curl -L https://get-stackql-deploy.io | tar xzf -
 sudo mv stackql-deploy /usr/local/bin/
 ```
 
-**Intel (x86_64):**
+Or download a specific platform build:
+
+**macOS Universal (Apple Silicon + Intel):**
 
 ```bash
-curl -L https://github.com/stackql/stackql-deploy-rs/releases/latest/download/stackql-deploy-macos-x86_64.tar.gz | tar xz
+curl -L https://github.com/stackql/stackql-deploy-rs/releases/latest/download/stackql-deploy-macos-universal.tar.gz | tar xz
 sudo mv stackql-deploy /usr/local/bin/
 ```
 
-</TabItem>
-<TabItem value="linux" label="Linux">
-
-**x86_64:**
+**Linux x86_64:**
 
 ```bash
 curl -L https://github.com/stackql/stackql-deploy-rs/releases/latest/download/stackql-deploy-linux-x86_64.tar.gz | tar xz
 sudo mv stackql-deploy /usr/local/bin/
 ```
 
-**ARM64:**
+**Linux ARM64:**
 
 ```bash
 curl -L https://github.com/stackql/stackql-deploy-rs/releases/latest/download/stackql-deploy-linux-arm64.tar.gz | tar xz
@@ -60,7 +58,7 @@ sudo mv stackql-deploy /usr/local/bin/
 **PowerShell:**
 
 ```powershell
-Invoke-WebRequest -Uri "https://github.com/stackql/stackql-deploy-rs/releases/latest/download/stackql-deploy-windows-x86_64.zip" -OutFile stackql-deploy.zip
+Invoke-WebRequest https://get-stackql-deploy.io -OutFile stackql-deploy.zip
 Expand-Archive stackql-deploy.zip -DestinationPath .
 Move-Item stackql-deploy.exe "$env:LOCALAPPDATA\Microsoft\WindowsApps\"
 Remove-Item stackql-deploy.zip
@@ -74,25 +72,27 @@ unzip stackql-deploy.zip
 ```
 
 </TabItem>
-<TabItem value="cargo" label="Cargo (from source)">
+<TabItem value="github-releases" label="GitHub Releases">
 
-If you have Rust installed (via [rustup](https://rustup.rs/)):
+Pre-built binaries are attached to every release on the [__GitHub Releases__](https://github.com/stackql/stackql-deploy-rs/releases) page. A `SHA256SUMS` file is included for verification.
 
-```bash
-cargo install stackql-deploy
-```
-
-This builds from source and installs to `~/.cargo/bin/`.
+| Platform | Asset |
+|----------|-------|
+| Linux x86_64 | `stackql-deploy-linux-x86_64.tar.gz` |
+| Linux ARM64 | `stackql-deploy-linux-arm64.tar.gz` |
+| macOS Universal (Apple Silicon + Intel) | `stackql-deploy-macos-universal.tar.gz` |
+| Windows x86_64 | `stackql-deploy-windows-x86_64.zip` |
 
 </TabItem>
 <TabItem value="github-actions" label="GitHub Actions">
 
-Use the [`stackql/setup-deploy`](https://github.com/marketplace/actions/stackql-deploy) action to install and run `stackql-deploy` in your CI/CD pipelines:
+Use the [`stackql/setup-deploy`](https://github.com/marketplace/actions/stackql-deploy) action to install and run `stackql-deploy` in your CI/CD pipelines.  The action automatically downloads the latest binary for the runner's platform.
+
+**Deploy a stack:**
 
 ```yaml
 steps:
   - uses: actions/checkout@v4
-
   - name: Deploy Stack
     uses: stackql/setup-deploy@v1.0.1
     with:
@@ -102,12 +102,39 @@ steps:
       env_vars: 'AWS_REGION=us-east-1'
 ```
 
-The action automatically downloads the latest binary for the runner's platform. See [__Deploying with GitHub Actions__](/github-actions) for the full reference.
+**Deploy and capture outputs:**
+
+```yaml
+  - name: Deploy Stack
+    id: stackql-deploy
+    uses: stackql/setup-deploy@v1.0.1
+    with:
+      command: 'build'
+      stack_dir: 'examples/my-stack'
+      stack_env: 'prod'
+      output_file: 'deployment-outputs.json'
+      env_vars: 'GOOGLE_PROJECT=my-project'
+
+  - name: Use outputs
+    run: |
+      echo '${{ steps.stackql-deploy.outputs.deployment_outputs }}' | jq .
+```
+
+See [__Deploying with GitHub Actions__](/github-actions) for the full reference.
+
+</TabItem>
+<TabItem value="cargo" label="Cargo (from source)">
+
+If you have the Rust toolchain installed (via [rustup](https://rustup.rs/)):
+
+```bash
+cargo install stackql-deploy
+```
+
+This builds from source and installs to `~/.cargo/bin/`.
 
 </TabItem>
 </Tabs>
-
-All platform binaries are available on the [__GitHub Releases__](https://github.com/stackql/stackql-deploy-rs/releases) page.
 
 ## How `stackql-deploy` works
 
@@ -255,7 +282,8 @@ For more detailed information see [`cli-reference/build`](/cli-reference/build),
 
 To get up and running quickly, `stackql-deploy` provides a set of quick start templates for common cloud providers. These templates include predefined configurations and resource queries tailored to AWS, Azure, and Google Cloud, among others.
 
-- [**AWS Quick Start Template**](/template-library/aws/vpc-and-ec2-instance): A basic setup for deploying a VPC, including subnets and routing configurations.
+- [**AWS Quick Start Template**](/template-library/aws/vpc-and-ec2-instance): A complete VPC networking stack with an EC2 web server using the `awscc` Cloud Control provider.
+- [**Databricks Quick Start Template**](/template-library/databricks/serverless-workspace): A multi-provider stack deploying a Databricks serverless workspace on AWS with Unity Catalog.
 - [**Azure Quick Start Template**](/template-library/azure/simple-vnet-and-vm): A setup for creating a Resource Group with associated resources.
 - [**Google Cloud Quick Start Template**](/template-library/google/k8s-the-hard-way): A configuration for deploying a VPC with network and firewall rules.
 

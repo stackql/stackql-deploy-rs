@@ -15,7 +15,7 @@ __`stackql-deploy`__ is a stateless, declarative, SQL driven Infrastructure-as-C
 
 ## Prerequisites
 
-This example requires `stackql-deploy` to be installed using __`pip install stackql-deploy`__.  The host used to run `stackql-deploy` needs the necessary environment variables set to authenticate to your specific provider, in the case of the `azure` provider, `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and `AZURE_CLIENT_SECRET` must be set (or their must be an authenticated session on the host using `az login`), for more information on authentication to `azure` see the [`azure` provider documentation](https://azure.stackql.io/providers/azure).
+This example requires `stackql-deploy` to be installed. Pre-built binaries are available from the [releases page](https://github.com/stackql/stackql-deploy-rs/releases). See`stackql-deploy` ([releases](https://github.com/stackql/stackql-deploy-rs/releases))__.  The host used to run `stackql-deploy` needs the necessary environment variables set to authenticate to your specific provider, in the case of the `azure` provider, `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and `AZURE_CLIENT_SECRET` must be set (or their must be an authenticated session on the host using `az login`), for more information on authentication to `azure` see the [`azure` provider documentation](https://azure.stackql.io/providers/azure).
 
 ## Usage
 

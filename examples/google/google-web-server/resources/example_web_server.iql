@@ -1,0 +1,53 @@
+/*+ exists */
+SELECT COUNT(*) as count FROM google.compute.instances
+WHERE project = '{{ project }}'
+AND zone = '{{ zone }}'
+AND instance = '{{ instance_name }}'
+
+/*+ create */
+INSERT INTO google.compute.instances
+(
+ zone,
+ project,
+ name,
+ machineType,
+ canIpForward,
+ deletionProtection,
+ scheduling,
+ networkInterfaces,
+ disks,
+ tags,
+ metadata
+)
+SELECT
+ '{{ zone }}',
+ '{{ project }}',
+ '{{ instance_name }}',
+ '{{ machine_type }}',
+ false,
+ false,
+ '{"automaticRestart": true}',
+ '{{ network_interfaces }}',
+ '{{ disks }}',
+ '{{ tags }}',
+ '{{ metadata }}'
+
+/*+ statecheck, retries=5, retry_delay=10 */
+SELECT COUNT(*) as count FROM google.compute.instances
+WHERE project = '{{ project }}'
+AND zone = '{{ zone }}'
+AND instance = '{{ instance_name }}'
+AND status = 'RUNNING'
+
+/*+ exports */
+SELECT name as instance_name
+FROM google.compute.instances
+WHERE project = '{{ project }}'
+AND zone = '{{ zone }}'
+AND instance = '{{ instance_name }}'
+
+/*+ delete, retries=10, retry_delay=10 */
+DELETE FROM google.compute.instances
+WHERE project = '{{ project }}'
+AND zone = '{{ zone }}'
+AND instance = '{{ instance_name }}'

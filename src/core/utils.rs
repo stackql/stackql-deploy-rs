@@ -13,6 +13,7 @@ use std::time::{Duration, Instant};
 
 use log::{debug, error, info};
 
+use crate::core::errors::check_fatal_error;
 use crate::utils::pgwire::PgwireLite;
 use crate::utils::query::{execute_query, QueryResult};
 
@@ -95,6 +96,13 @@ pub fn run_stackql_query(
                     if !result_maps.is_empty() {
                         if let Some(err) = result_maps[0].get("error") {
                             last_error = Some(err.clone());
+                            // Check for fatal errors even when suppressing
+                            if let Some(pattern) = check_fatal_error(err) {
+                                catch_error_and_exit(&format!(
+                                    "Fatal error (matched '{}'):\n\n{}\n",
+                                    pattern, err
+                                ));
+                            }
                             if !suppress_errors {
                                 if attempt == retries {
                                     catch_error_and_exit(&format!(
@@ -155,6 +163,13 @@ pub fn run_stackql_query(
             Err(e) => {
                 last_error = Some(e.clone());
                 debug!("Query error on attempt {}: {}", attempt + 1, e);
+                // Check for fatal errors (network, auth) that should not be retried
+                if let Some(pattern) = check_fatal_error(&e) {
+                    catch_error_and_exit(&format!(
+                        "Fatal error (matched '{}'):\n\n{}\n",
+                        pattern, e
+                    ));
+                }
                 if attempt == retries && !suppress_errors {
                     catch_error_and_exit(&format!(
                         "Exception during stackql query execution:\n\n{}\n",
@@ -212,7 +227,11 @@ pub fn run_stackql_command(
         match execute_query(&processed_command, client) {
             Ok(result) => {
                 match result {
-                    QueryResult::Data { notices, .. } => {
+                    QueryResult::Data {
+                        notices,
+                        columns,
+                        rows,
+                    } => {
                         // Check for errors in notices
                         for notice in &notices {
                             if error_detected_in_notice(notice) && !ignore_errors {
@@ -232,9 +251,31 @@ pub fn run_stackql_command(
                                 }
                             }
                         }
+                        // Log returned data (e.g. from RETURNING clause) at debug level
+                        if !rows.is_empty() {
+                            let col_names: Vec<&str> =
+                                columns.iter().map(|c| c.name.as_str()).collect();
+                            let result_maps: Vec<HashMap<String, String>> = rows
+                                .iter()
+                                .map(|row| {
+                                    col_names
+                                        .iter()
+                                        .enumerate()
+                                        .map(|(i, &name)| {
+                                            let val =
+                                                row.values.get(i).cloned().unwrap_or_default();
+                                            (name.to_string(), val)
+                                        })
+                                        .collect()
+                                })
+                                .collect();
+                            if let Ok(json) = serde_json::to_string_pretty(&result_maps) {
+                                debug!("Command returned data:\n\n{}\n", json);
+                            }
+                        }
                         let msg = notices.join("\n");
                         if !msg.is_empty() {
-                            debug!("Stackql command executed successfully:\n\n{}\n", msg);
+                            debug!("Command notices:\n\n{}\n", msg);
                         }
                         return msg;
                     }
@@ -249,6 +290,13 @@ pub fn run_stackql_command(
                 }
             }
             Err(e) => {
+                // Check for fatal errors (network, auth) before retrying
+                if let Some(pattern) = check_fatal_error(&e) {
+                    catch_error_and_exit(&format!(
+                        "Fatal error (matched '{}'):\n\n{}\n",
+                        pattern, e
+                    ));
+                }
                 if !ignore_errors {
                     if attempt < retries {
                         debug!(
@@ -759,6 +807,13 @@ pub fn run_stackql_dml_returning(
                 }
             },
             Err(e) => {
+                // Check for fatal errors (network, auth) before retrying
+                if let Some(pattern) = check_fatal_error(&e) {
+                    catch_error_and_exit(&format!(
+                        "Fatal error (matched '{}'):\n\n{}\n",
+                        pattern, e
+                    ));
+                }
                 if !ignore_errors {
                     if attempt < retries {
                         debug!(

@@ -1,0 +1,46 @@
+/*+ exists */
+SELECT COUNT(*) as count FROM google.compute.subnetworks
+WHERE subnetwork = '{{ subnet_name }}'
+AND project = '{{ project }}'
+AND region = '{{ region }}'
+AND network = '{{ vpc_link }}'
+
+/*+ create, retries=5, retry_delay=10 */
+INSERT INTO google.compute.subnetworks
+(
+ project,
+ region,
+ name,
+ network,
+ ipCidrRange,
+ privateIpGoogleAccess
+)
+SELECT
+ '{{ project }}',
+ '{{ region }}',
+ '{{ subnet_name }}',
+ '{{ vpc_link }}',
+ '{{ ip_cidr_range }}',
+ true
+
+/*+ statecheck, retries=5, retry_delay=10 */
+SELECT COUNT(*) as count FROM google.compute.subnetworks
+WHERE project = '{{ project }}'
+AND region = '{{ region }}'
+AND subnetwork = '{{ subnet_name }}'
+AND network = '{{ vpc_link }}'
+
+/*+ exports */
+SELECT
+ name as subnet_name,
+ selfLink as subnet_link
+FROM google.compute.subnetworks
+WHERE subnetwork = '{{ subnet_name }}'
+AND project = '{{ project }}'
+AND region = '{{ region }}'
+
+/*+ delete */
+DELETE FROM google.compute.subnetworks
+WHERE subnetwork = '{{ subnet_name }}'
+AND project = '{{ project }}'
+AND region = '{{ region }}'

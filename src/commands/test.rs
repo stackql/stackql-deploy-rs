@@ -297,7 +297,5 @@ fn run_test(
     let elapsed_str = format!("{:.2?}", elapsed);
     info!("test completed in {}", elapsed_str);
 
-    if let Some(of) = output_file {
-        runner.process_stack_exports(dry_run, Some(of), &elapsed_str);
-    }
+    runner.process_stack_exports(dry_run, output_file, &elapsed_str);
 }
