@@ -35,6 +35,7 @@ resources:
     exports:
       - vpc_id
       - vpc_cidr_block
+
   - name: example_subnet
     props:
       - name: subnet_cidr_block
@@ -53,6 +54,7 @@ resources:
     exports:
       - subnet_id
       - availability_zone
+
   - name: example_inet_gateway
     props:
       - name: inet_gateway_tags
@@ -62,8 +64,10 @@ resources:
         merge: ['global_tags']
     exports:
       - internet_gateway_id
+
   - name: example_inet_gw_attachment
     props: []
+
   - name: example_route_table
     props:
       - name: route_table_tags
@@ -73,12 +77,15 @@ resources:
         merge: ['global_tags']
     exports:
       - route_table_id
+
   - name: example_subnet_rt_assn
     props: []
     exports:
       - subnet_route_table_assn_id
+
   - name: example_inet_route
     props: []
+
   - name: example_security_group
     props:
       - name: group_description
@@ -111,6 +118,7 @@ resources:
           IpProtocol: "-1"
     exports:
       - security_group_id
+
   - name: example_web_server
     props:
       - name: ami_id
@@ -141,6 +149,7 @@ resources:
         - Identifier: instance_id
     exports:
       - instance_id
+
   - name: get_web_server_url
     type: query
     props: []

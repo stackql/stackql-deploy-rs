@@ -1,0 +1,69 @@
+/*+ exists */
+WITH tagged_resources AS
+(
+    SELECT split_part(ResourceARN, '/', 2) as security_group_id
+    FROM awscc.tagging.tagged_resources
+    WHERE region = '{{ region }}'
+    AND TagFilters = '{{ global_tags | to_aws_tag_filters }}'
+    AND ResourceTypeFilters = '["ec2:security-group"]'
+),
+security_groups AS
+(
+    SELECT id as security_group_id
+    FROM awscc.ec2.security_groups_list_only
+    WHERE region = '{{ region }}'
+)
+SELECT r.security_group_id
+FROM security_groups r
+INNER JOIN tagged_resources tr
+ON r.security_group_id = tr.security_group_id;
+
+/*+ statecheck, retries=5, retry_delay=5 */
+SELECT COUNT(*) as count FROM
+(
+SELECT 
+AWS_POLICY_EQUAL(tags, '{{ sg_tags }}') as test_tags,
+AWS_POLICY_EQUAL(security_group_ingress, '{{ security_group_ingress }}') as test_ingress
+FROM awscc.ec2.security_groups
+WHERE Identifier = '{{ this.security_group_id }}'
+AND region = '{{ region }}'
+AND group_name = '{{ group_name }}'
+AND vpc_id = '{{ vpc_id }}'
+AND group_description = '{{ group_description }}'
+) t
+WHERE test_tags = 1
+AND test_ingress = 1;
+
+/*+ create */
+INSERT INTO awscc.ec2.security_groups (
+ GroupName,
+ GroupDescription,
+ VpcId,
+ SecurityGroupIngress,
+ SecurityGroupEgress,
+ Tags,
+ region
+)
+SELECT
+ '{{ group_name }}',
+ '{{ group_description }}',
+ '{{ vpc_id }}',
+ '{{ security_group_ingress }}',
+ '{{ security_group_egress }}',
+ '{{ sg_tags }}',
+ '{{ region }}'
+RETURNING *;
+
+/*+ exports */
+SELECT '{{ this.security_group_id }}' as security_group_id;
+
+/*+ troubleshoot:create */
+SELECT OperationStatus, StatusMessage, ErrorCode
+FROM awscc.cloud_control.resource_request
+WHERE RequestToken = '{{ this.RequestToken }}'
+AND region = '{{ region }}';
+
+/*+ delete */
+DELETE FROM awscc.ec2.security_groups
+WHERE Identifier = '{{ security_group_id }}'
+AND region = '{{ region }}';

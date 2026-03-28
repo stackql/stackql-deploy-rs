@@ -18,7 +18,7 @@ use crate::commands::common_args::{
     FailureAction,
 };
 use crate::core::config::get_resource_type;
-use crate::core::utils::catch_error_and_exit;
+use crate::core::utils::{catch_error_and_exit, export_vars};
 use crate::utils::connection::create_client;
 use crate::utils::display::{print_unicode_box, BorderColor};
 use crate::utils::server::{check_and_start_server, stop_local_server};
@@ -99,11 +99,21 @@ pub fn execute(matches: &ArgMatches) {
 }
 
 /// Render the statecheck query template with the given context.
+/// Uses try_render_query so that unresolved variables (e.g. this.* fields
+/// not yet captured) return None instead of a hard error.
 macro_rules! render_statecheck {
     ($runner:expr, $resource_queries:expr, $resource:expr, $ctx:expr) => {
-        $resource_queries.get("statecheck").map(|q| {
-            let rendered = $runner.render_query(&$resource.name, "statecheck", &q.template, $ctx);
-            (rendered, q.options.clone())
+        $resource_queries.get("statecheck").and_then(|q| {
+            match $runner.try_render_query(&$resource.name, "statecheck", &q.template, $ctx) {
+                Some(rendered) => Some((rendered, q.options.clone())),
+                None => {
+                    debug!(
+                        "statecheck query for [{}] deferred (unresolved variables)",
+                        $resource.name
+                    );
+                    None
+                }
+            }
         })
     };
 }
@@ -302,20 +312,30 @@ fn run_build(
                         apply_exists_fields(fields, &resource.name, &mut full_context);
                     }
                 } else {
-                    // Use statecheck as exists check (render with current ctx)
-                    let statecheck_query =
-                        render_statecheck!(runner, resource_queries, resource, &full_context);
-                    let sq = statecheck_query.as_ref().unwrap();
-                    let sq_opts = resource_queries.get("statecheck").unwrap();
-                    is_correct_state = runner.check_if_resource_is_correct_state(
-                        resource,
-                        &sq.0,
-                        sq_opts.options.retries,
-                        sq_opts.options.retry_delay,
-                        dry_run,
-                        show_queries,
-                    );
-                    resource_exists = is_correct_state;
+                    // Use statecheck as exists check (render with current ctx).
+                    // If the statecheck template has unresolved variables (e.g.
+                    // this.* fields not yet captured), the resource cannot exist
+                    // yet - treat as not-found.
+                    if let Some(sq) =
+                        render_statecheck!(runner, resource_queries, resource, &full_context)
+                    {
+                        let sq_opts = resource_queries.get("statecheck").unwrap();
+                        is_correct_state = runner.check_if_resource_is_correct_state(
+                            resource,
+                            &sq.0,
+                            sq_opts.options.retries,
+                            sq_opts.options.retry_delay,
+                            dry_run,
+                            show_queries,
+                        );
+                        resource_exists = is_correct_state;
+                    } else {
+                        info!(
+                            "[{}] statecheck has unresolved variables, treating as not found",
+                            resource.name
+                        );
+                        resource_exists = false;
+                    }
                 }
 
                 // Pre-deployment state check for existing resources
@@ -328,18 +348,24 @@ fn run_build(
                         is_correct_state = true;
                     } else {
                         // Re-render statecheck with (possibly enriched) context
-                        let statecheck_query =
-                            render_statecheck!(runner, resource_queries, resource, &full_context);
-                        let sq = statecheck_query.as_ref().unwrap();
-                        let sq_opts = resource_queries.get("statecheck").unwrap();
-                        is_correct_state = runner.check_if_resource_is_correct_state(
-                            resource,
-                            &sq.0,
-                            sq_opts.options.retries,
-                            sq_opts.options.retry_delay,
-                            dry_run,
-                            show_queries,
-                        );
+                        if let Some(sq) =
+                            render_statecheck!(runner, resource_queries, resource, &full_context)
+                        {
+                            let sq_opts = resource_queries.get("statecheck").unwrap();
+                            is_correct_state = runner.check_if_resource_is_correct_state(
+                                resource,
+                                &sq.0,
+                                sq_opts.options.retries,
+                                sq_opts.options.retry_delay,
+                                dry_run,
+                                show_queries,
+                            );
+                        } else {
+                            warn!(
+                                "[{}] statecheck has unresolved variables during pre-deploy validation",
+                                resource.name
+                            );
+                        }
                     }
                 }
 
@@ -461,29 +487,67 @@ fn run_build(
             let mut is_created_or_updated = false;
 
             if !resource_exists {
-                // JIT render create/createorupdate query
+                // JIT render create/createorupdate query.
+                // In dry-run mode, use try_render_query so that unresolved
+                // variables (from exports not yet available) produce a
+                // deferral instead of a hard error.
                 let create_query = if has_createorupdate {
                     let cou = resource_queries.get("createorupdate").unwrap();
-                    runner.render_query(
-                        &resource.name,
-                        "createorupdate",
-                        &cou.template,
-                        &full_context,
-                    )
+                    if dry_run {
+                        runner.try_render_query(
+                            &resource.name,
+                            "createorupdate",
+                            &cou.template,
+                            &full_context,
+                        )
+                    } else {
+                        Some(runner.render_query(
+                            &resource.name,
+                            "createorupdate",
+                            &cou.template,
+                            &full_context,
+                        ))
+                    }
                 } else {
                     let cq = resource_queries.get("create").unwrap();
-                    runner.render_query(&resource.name, "create", &cq.template, &full_context)
+                    if dry_run {
+                        runner.try_render_query(
+                            &resource.name,
+                            "create",
+                            &cq.template,
+                            &full_context,
+                        )
+                    } else {
+                        Some(runner.render_query(
+                            &resource.name,
+                            "create",
+                            &cq.template,
+                            &full_context,
+                        ))
+                    }
                 };
 
-                let (created, returning_row) = runner.create_resource(
-                    resource,
-                    &create_query,
-                    create_retries,
-                    create_retry_delay,
-                    dry_run,
-                    show_queries,
-                    ignore_errors,
-                );
+                if create_query.is_none() {
+                    info!(
+                        "dry run create for [{}]: query has unresolved variables \
+                         (upstream exports not yet available), skipping render",
+                        resource.name
+                    );
+                }
+
+                let (created, returning_row) = if let Some(ref cq) = create_query {
+                    runner.create_resource(
+                        resource,
+                        cq,
+                        create_retries,
+                        create_retry_delay,
+                        dry_run,
+                        show_queries,
+                        ignore_errors,
+                    )
+                } else {
+                    (false, None)
+                };
                 is_created_or_updated = created;
 
                 // Capture RETURNING * result.
@@ -569,20 +633,52 @@ fn run_build(
             }
 
             if resource_exists && !is_correct_state {
-                // JIT render update/createorupdate query
+                // JIT render update/createorupdate query.
+                // In dry-run mode, use try_render_query for tolerance.
                 let update_query: Option<String> = if has_createorupdate {
                     let cou = resource_queries.get("createorupdate").unwrap();
-                    Some(runner.render_query(
-                        &resource.name,
-                        "createorupdate",
-                        &cou.template,
-                        &full_context,
-                    ))
+                    if dry_run {
+                        runner.try_render_query(
+                            &resource.name,
+                            "createorupdate",
+                            &cou.template,
+                            &full_context,
+                        )
+                    } else {
+                        Some(runner.render_query(
+                            &resource.name,
+                            "createorupdate",
+                            &cou.template,
+                            &full_context,
+                        ))
+                    }
                 } else {
-                    resource_queries.get("update").map(|uq| {
-                        runner.render_query(&resource.name, "update", &uq.template, &full_context)
+                    resource_queries.get("update").and_then(|uq| {
+                        if dry_run {
+                            runner.try_render_query(
+                                &resource.name,
+                                "update",
+                                &uq.template,
+                                &full_context,
+                            )
+                        } else {
+                            Some(runner.render_query(
+                                &resource.name,
+                                "update",
+                                &uq.template,
+                                &full_context,
+                            ))
+                        }
                     })
                 };
+
+                if update_query.is_none() && dry_run {
+                    info!(
+                        "dry run update for [{}]: query has unresolved variables \
+                         (upstream exports not yet available), skipping render",
+                        resource.name
+                    );
+                }
 
                 let (updated, returning_row) = runner.update_resource(
                     resource,
@@ -682,43 +778,68 @@ fn run_build(
 
             // Post-deploy state check
             if is_created_or_updated {
-                // Check if return_vals already captured fields from RETURNING.
-                // If so, skip the post-create exists re-run to save API calls.
                 let op = if !resource_exists { "create" } else { "update" };
-                let has_return_vals = !resource.get_return_val_mappings(op).is_empty();
 
                 // After create/update, re-run the exists query to capture
-                // this.* fields (e.g. identifier) that are needed by the
-                // statecheck and exports queries — but skip this if
-                // return_vals already provided them.
-                if !has_return_vals {
-                    if let Some(ref eq) = exists_query {
-                        let eq_opts = resource_queries.get("exists").unwrap();
-                        let (post_exists, fields) = runner.check_if_resource_exists(
+                // this.* fields (e.g. identifier) needed by statecheck and
+                // exports queries.  This always runs even when return_vals
+                // captured some fields, because the exists query discovers
+                // the resource identifier and waits for the resource to
+                // become available (async/eventual consistency).
+                if let Some(ref eq) = exists_query {
+                    // Use statecheck retry settings for the post-create
+                    // exists check when available (async providers need
+                    // time for the resource to become discoverable).
+                    let (post_retries, post_delay) =
+                        if let Some(sc_opts) = resource_queries.get("statecheck") {
+                            (sc_opts.options.retries, sc_opts.options.retry_delay)
+                        } else {
+                            let eq_opts = resource_queries.get("exists").unwrap();
+                            (eq_opts.options.retries, eq_opts.options.retry_delay)
+                        };
+
+                    let (post_exists, fields) = runner.check_if_resource_exists(
+                        resource,
+                        &eq.0,
+                        post_retries,
+                        post_delay,
+                        dry_run,
+                        show_queries,
+                        false,
+                    );
+
+                    // If exists retries are exhausted and resource still
+                    // not found, run troubleshoot and exit immediately -
+                    // don't attempt statecheck/exports.
+                    if !post_exists && !dry_run {
+                        runner.run_troubleshoot(
                             resource,
-                            &eq.0,
-                            eq_opts.options.retries,
-                            eq_opts.options.retry_delay,
-                            dry_run,
+                            &resource_queries,
+                            op,
+                            &full_context,
                             show_queries,
-                            false,
                         );
-                        apply_exists_fields(fields, &resource.name, &mut full_context);
+                        catch_error_and_exit(&format!(
+                            "[{}] not found after {} post-deploy check, {} operation may have failed.",
+                            resource.name, op, op
+                        ));
+                    }
 
-                        // Always try to render exports after post-create exists
-                        exports_query_str =
-                            render_exports!(runner, resource_queries, resource, &full_context);
+                    apply_exists_fields(fields, &resource.name, &mut full_context);
 
-                        // If exists confirms the resource is present and there is
-                        // no statecheck or exports query, the exists query IS
-                        // the statecheck: a successful re-run confirms the
-                        // resource was created/updated successfully.
-                        if post_exists
-                            && !resource_queries.contains_key("statecheck")
-                            && exports_query_str.is_none()
-                        {
-                            is_correct_state = true;
-                        }
+                    // Always try to render exports after post-create exists
+                    exports_query_str =
+                        render_exports!(runner, resource_queries, resource, &full_context);
+
+                    // If exists confirms the resource is present and there is
+                    // no statecheck or exports query, the exists query IS
+                    // the statecheck: a successful re-run confirms the
+                    // resource was created/updated successfully.
+                    if post_exists
+                        && !resource_queries.contains_key("statecheck")
+                        && exports_query_str.is_none()
+                    {
+                        is_correct_state = true;
                     }
                 }
 
@@ -750,6 +871,39 @@ fn run_build(
                         dry_run,
                         show_queries,
                     );
+                } else if resource_queries.contains_key("statecheck") {
+                    // Statecheck anchor exists but could not be rendered (unresolved
+                    // this.* variables). Fall through to exports-as-proxy if available,
+                    // otherwise treat as correct (the resource was just created and
+                    // the post-create exists query did not return identifier fields).
+                    if let Some(ref eq_str) = exports_query_str {
+                        info!(
+                            "statecheck deferred for [{}], using exports query as post-deploy statecheck",
+                            resource.name
+                        );
+                        let post_retries = exports_retries;
+                        let post_delay = exports_retry_delay;
+
+                        let (state, proxy) = runner.check_state_using_exports_proxy(
+                            resource,
+                            eq_str,
+                            post_retries,
+                            post_delay,
+                            dry_run,
+                            show_queries,
+                        );
+                        is_correct_state = state;
+                        if proxy.is_some() {
+                            exports_result_from_proxy = proxy;
+                        }
+                    } else {
+                        info!(
+                            "statecheck deferred for [{}] and no exports available, \
+                             accepting post-deploy state based on successful create/update",
+                            resource.name
+                        );
+                        is_correct_state = true;
+                    }
                 } else if let Some(ref eq_str) = exports_query_str {
                     info!(
                         "using exports query as post-deploy statecheck for [{}]",
@@ -774,6 +928,14 @@ fn run_build(
             }
 
             if !is_correct_state && !dry_run {
+                let op = if !resource_exists { "create" } else { "update" };
+                runner.run_troubleshoot(
+                    resource,
+                    &resource_queries,
+                    op,
+                    &full_context,
+                    show_queries,
+                );
                 catch_error_and_exit(&format!(
                     "deployment failed for {} after post-deploy checks.",
                     resource.name
@@ -838,13 +1000,49 @@ fn run_build(
         if exports_query_str.is_none()
             && resource_queries.contains_key("exports")
             && !resource.exports.is_empty()
-            && !dry_run
         {
-            catch_error_and_exit(&format!(
-                "exports query for [{}] could not be rendered - unresolved template variables. \
-                 Check that all referenced variables are defined in the manifest or exported by prior resources.",
-                resource.name
-            ));
+            if dry_run {
+                // In dry-run mode, exports may not render because this.*
+                // fields are unavailable (no actual API calls).  Inject
+                // placeholder values so downstream resources can still
+                // render their templates.
+                let mut placeholder_data = HashMap::new();
+                for item in &resource.exports {
+                    if let Some(map) = item.as_mapping() {
+                        for (_, val) in map {
+                            if let Some(v) = val.as_str() {
+                                placeholder_data.insert(v.to_string(), "<evaluated>".to_string());
+                            }
+                        }
+                    } else if let Some(s) = item.as_str() {
+                        placeholder_data.insert(s.to_string(), "<evaluated>".to_string());
+                    }
+                }
+                info!(
+                    "dry run: injecting placeholder exports for [{}]: {:?}",
+                    resource.name,
+                    placeholder_data.keys().collect::<Vec<_>>()
+                );
+                export_vars(
+                    &mut runner.global_context,
+                    &resource.name,
+                    &placeholder_data,
+                    &resource.protected,
+                );
+            } else {
+                runner.run_troubleshoot(
+                    resource,
+                    &resource_queries,
+                    "create",
+                    &full_context,
+                    show_queries,
+                );
+                catch_error_and_exit(&format!(
+                    "exports query for [{}] could not be rendered - unresolved template variables. \
+                     Check that all referenced variables are defined in the manifest or exported by prior resources.",
+                    resource.name
+                ));
+            }
         }
 
         if !dry_run {

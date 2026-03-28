@@ -1,0 +1,24 @@
+/*+ createorupdate */
+INSERT INTO awscc.ec2.routes (
+ DestinationCidrBlock,
+ GatewayId,
+ RouteTableId,
+ region
+)
+SELECT
+ '0.0.0.0/0',
+ '{{ internet_gateway_id }}',
+ '{{ route_table_id }}',
+ '{{ region }}'
+RETURNING *;
+
+/*+ statecheck, retries=3, retry_delay=5 */
+SELECT count(*) as count
+FROM awscc.ec2.routes
+WHERE Identifier = '{{ route_table_id }}|0.0.0.0/0'
+AND region = '{{ region }}';
+
+/*+ delete */
+DELETE FROM awscc.ec2.routes
+WHERE Identifier = '{{ route_table_id }}|0.0.0.0/0'
+AND region = '{{ region }}';

@@ -314,6 +314,79 @@ Some providers return the final operation status synchronously in the `RETURNING
 - `RETURNING *` only captures the **first** row of the response.
 - The `callback.*` shorthand is implicitly scoped to the current resource's `.iql` file.  Use the fully-qualified `{resource_name}.callback.*` form in downstream resources.
 
+### `troubleshoot`
+
+`troubleshoot` blocks are optional diagnostic queries that run automatically when a post-operation verification fails - specifically when a `build` statecheck fails or a `teardown` delete cannot be confirmed.  They provide visibility into why an operation failed by querying the provider for status information that is not available in the standard error output.
+
+This is useful for any provider that returns an asynchronous operation handle (request token, operation ID, job ID, etc.) via `RETURNING *`.  When combined with [`return_vals`](manifest-file#resourcereturn_vals) in the manifest, the handle is captured as a `this.*` variable which the troubleshoot query can reference.
+
+For example, given this manifest configuration:
+
+```yaml
+return_vals:
+  create:
+    - RequestToken
+```
+
+The troubleshoot query can reference the captured token:
+
+```sql
+/*+ troubleshoot:create */
+SELECT OperationStatus, StatusMessage, ErrorCode
+FROM awscc.cloud_control.resource_request
+WHERE RequestToken = '{{ this.RequestToken }}'
+AND region = '{{ region }}';
+```
+
+The operation qualifier (`:create`, `:update`, `:delete`) associates the troubleshoot query with a specific operation.  A plain `/*+ troubleshoot */` with no qualifier runs after **any** failed operation on the resource.
+
+#### When troubleshoot runs
+
+| Command | Trigger |
+|---|---|
+| `build` | Post-deploy statecheck fails (resource not in desired state after create or update) |
+| `teardown` | Delete cannot be confirmed (resource still exists after delete) |
+
+#### Execution behaviour
+
+- **Fire-and-forget** - the query executes once (not polled like callbacks)
+- **Tolerant rendering** - if template variables are missing the query is silently skipped
+- **Non-blocking** - if the troubleshoot query itself fails, a warning is logged and the original error is still reported
+- Results are logged as pretty-printed JSON at `info` level so they appear in default output alongside the failure message
+- In dry-run mode, troubleshoot queries do not execute
+
+#### Output format
+
+When a troubleshoot query returns results, they are logged as pretty-printed JSON:
+
+```
+[vpc] troubleshoot diagnostics (create):
+
+[
+  {
+    "OperationStatus": "FAILED",
+    "StatusMessage": "The maximum number of VPCs has been reached.",
+    "ErrorCode": "GeneralServiceException"
+  }
+]
+```
+
+#### Context
+
+The troubleshoot query is rendered with the full template context at the point of failure, including:
+
+- All global and resource properties from the manifest
+- `callback.*` variables from `RETURNING *` data (if the preceding DML included `RETURNING *`)
+- `this.*` fields captured by the `exists` query (if available)
+- All variables exported by upstream resources
+
+#### Troubleshoot options
+
+| Option | Required | Default | Description |
+|---|---|---|---|
+| `retries` | no | 1 | Number of query attempts |
+| `retry_delay` | no | 0 | Seconds to wait between attempts |
+
 ## Query options
 
 Query options are used with query anchors to provide options for the execution of the query.

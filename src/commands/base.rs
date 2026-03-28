@@ -10,7 +10,7 @@ use std::fs;
 use std::path::Path;
 use std::process;
 
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 
 use crate::core::config::{get_full_context, render_globals, render_string_value};
 use crate::core::env::load_env_vars;
@@ -373,7 +373,7 @@ impl CommandRunner {
             return (false, None);
         }
 
-        info!("[{}] does not exist, creating...", resource.name);
+        info!("creating [{}]...", resource.name);
         show_query(show_queries, create_query);
 
         if has_returning_clause(create_query) {
@@ -725,7 +725,7 @@ impl CommandRunner {
         resource_name: &str,
         returning_row: &HashMap<String, String>,
     ) {
-        info!(
+        debug!(
             "storing RETURNING * result for [{}] in callback context",
             resource_name
         );
@@ -795,6 +795,90 @@ impl CommandRunner {
             "[{}] {} callback completed successfully",
             resource.name, operation
         );
+    }
+
+    /// Run an optional troubleshoot diagnostic query after a failed operation.
+    ///
+    /// Looks for a `troubleshoot:{operation}` anchor first, falling back to a
+    /// generic `troubleshoot` anchor.  If found, the query is rendered with
+    /// `try_render_query` (tolerant of missing variables) and executed once.
+    /// Results are logged at `error!()` level so the user sees them alongside
+    /// the failure message.
+    ///
+    /// This method never causes the build/teardown to fail - if the
+    /// troubleshoot query itself errors, a warning is logged and execution
+    /// continues to the original error path.
+    pub fn run_troubleshoot(
+        &mut self,
+        resource: &Resource,
+        resource_queries: &HashMap<String, ParsedQuery>,
+        operation: &str,
+        full_context: &HashMap<String, String>,
+        show_queries: bool,
+    ) {
+        // Look up operation-specific anchor first, fall back to generic
+        let specific = format!("troubleshoot:{}", operation);
+        let anchor = if resource_queries.contains_key(&specific) {
+            &specific
+        } else if resource_queries.contains_key("troubleshoot") {
+            "troubleshoot"
+        } else {
+            return;
+        };
+
+        let pq = resource_queries.get(anchor).unwrap();
+
+        let rendered =
+            match self.try_render_query(&resource.name, anchor, &pq.template, full_context) {
+                Some(q) => q,
+                None => {
+                    // Extract referenced variables from template to report
+                    // which ones are missing
+                    let re = regex::Regex::new(r"\{\{\s*([\w.]+)").unwrap();
+                    let missing: Vec<&str> = re
+                        .captures_iter(&pq.template)
+                        .filter_map(|c| c.get(1).map(|m| m.as_str()))
+                        .filter(|v| !full_context.contains_key(*v))
+                        .collect();
+                    warn!(
+                        "[{}] troubleshoot query could not be rendered, missing variables: {:?}",
+                        resource.name, missing
+                    );
+                    return;
+                }
+            };
+
+        info!(
+            "running troubleshoot query for [{}] ({})...",
+            resource.name, operation
+        );
+        show_query(show_queries, &rendered);
+
+        let results = run_stackql_query(
+            &rendered,
+            &mut self.client,
+            true,
+            pq.options.retries,
+            pq.options.retry_delay,
+        );
+
+        if results.is_empty() {
+            warn!("[{}] troubleshoot query returned no results", resource.name);
+            return;
+        }
+
+        if let Ok(json) = serde_json::to_string_pretty(&results) {
+            info!(
+                "[{}] troubleshoot diagnostics ({}):\n\n{}\n",
+                resource.name, operation, json
+            );
+        } else {
+            // Fallback if JSON serialization fails
+            info!(
+                "[{}] troubleshoot diagnostics ({}): {:?}",
+                resource.name, operation, results
+            );
+        }
     }
 
     /// Run a command-type query.

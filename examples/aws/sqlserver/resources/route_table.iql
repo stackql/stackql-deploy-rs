@@ -1,0 +1,50 @@
+/*+ exists */
+WITH tagged_resources AS
+(
+	SELECT split_part(ResourceARN, '/', 2) as route_table_id
+	FROM awscc.tagging.tagged_resources
+	WHERE region = '{{ region }}'
+	AND TagFilters = '{{ global_tags | to_aws_tag_filters }}'
+	AND ResourceTypeFilters = '["ec2:route-table"]'
+),
+route_tables AS
+(
+	SELECT route_table_id
+	FROM awscc.ec2.route_tables_list_only
+	WHERE region = '{{ region }}'
+)
+SELECT r.route_table_id
+FROM route_tables r
+INNER JOIN tagged_resources tr
+ON r.route_table_id = tr.route_table_id;
+
+/*+ statecheck, retries=5, retry_delay=5 */
+SELECT COUNT(*) as count FROM
+(
+SELECT 
+AWS_POLICY_EQUAL(tags, '{{ route_table_tags }}') as test_tags
+FROM awscc.ec2.route_tables
+WHERE Identifier = '{{ this.route_table_id }}'
+AND region = '{{ region }}'
+) t
+WHERE test_tags = 1;
+
+/*+ create */
+INSERT INTO awscc.ec2.route_tables (
+ Tags,
+ VpcId,
+ region
+)
+SELECT
+ '{{ route_table_tags }}',
+ '{{ vpc_id }}',
+ '{{ region }}'
+RETURNING *;
+
+/*+ exports */
+SELECT '{{ this.route_table_id }}' as route_table_id;
+
+/*+ delete */
+DELETE FROM awscc.ec2.route_tables
+WHERE Identifier = '{{ route_table_id }}'
+AND region = '{{ region }}';

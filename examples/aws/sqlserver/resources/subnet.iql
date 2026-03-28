@@ -1,0 +1,68 @@
+/*+ exists */
+WITH tagged_resources AS
+(
+    SELECT split_part(ResourceARN, '/', 2) as subnet_id
+    FROM awscc.tagging.tagged_resources
+    WHERE region = '{{ region }}'
+    AND TagFilters = '{{ global_tags | to_aws_tag_filters }}'
+    AND ResourceTypeFilters = '["ec2:subnet"]'
+),
+subnets AS
+(
+    SELECT subnet_id
+    FROM awscc.ec2.subnets_list_only
+    WHERE region = '{{ region }}'
+)
+SELECT r.subnet_id
+FROM subnets r
+INNER JOIN tagged_resources tr
+ON r.subnet_id = tr.subnet_id;
+
+/*+ statecheck, retries=5, retry_delay=5 */
+SELECT COUNT(*) as count FROM
+(
+SELECT 
+AWS_POLICY_EQUAL(tags, '{{ subnet_tags }}') as test_tags
+FROM awscc.ec2.subnets
+WHERE Identifier = '{{ this.subnet_id }}'
+AND region = '{{ region }}'
+AND cidr_block = '{{ subnet_cidr_block }}'
+AND vpc_id = '{{ vpc_id }}'
+AND availability_zone = '{{ availability_zone }}'
+) t
+WHERE test_tags = 1;
+
+/*+ create */
+INSERT INTO awscc.ec2.subnets (
+ VpcId,
+ CidrBlock,
+ MapPublicIpOnLaunch,
+ Tags,
+ AvailabilityZone,
+ region
+)
+SELECT
+ '{{ vpc_id }}',
+ '{{ subnet_cidr_block }}',
+ true,
+ '{{ subnet_tags }}',
+ '{{ availability_zone }}',
+ '{{ region }}'
+RETURNING *;
+
+/*+ exports, retries=5, retry_delay=5 */
+SELECT subnet_id, availability_zone
+FROM awscc.ec2.subnets
+WHERE Identifier = '{{ this.subnet_id }}'
+AND region = '{{ region }}';
+
+/*+ troubleshoot:create */
+SELECT OperationStatus, StatusMessage, ErrorCode
+FROM awscc.cloud_control.resource_request
+WHERE RequestToken = '{{ this.RequestToken }}'
+AND region = '{{ region }}';
+
+/*+ delete */
+DELETE FROM awscc.ec2.subnets
+WHERE Identifier = '{{ subnet_id }}'
+AND region = '{{ region }}';

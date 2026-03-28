@@ -1,5 +1,29 @@
 # Changelog
 
+## 2.0.6 (2026-03-28)
+
+### Fixes
+
+- Fixed eager rendering of `statecheck` queries that caused hard failures when `this.*` variables were not yet available (e.g. post-create exists re-run fails due to eventual consistency). `statecheck` now uses JIT rendering like `exports`, deferring gracefully when template variables are unresolved.
+- When a deferred `statecheck` cannot be rendered post-deploy, the build falls through to `exports`-as-proxy validation or accepts the create/update based on successful execution.
+- Applied the same fix to `teardown`, where `statecheck` used as an exists fallback would crash on unresolved variables instead of skipping the resource.
+- Fixed `--dry-run` failures for resources that depend on exports from upstream resources. `create` and `update` query rendering now defers gracefully in dry-run mode when upstream exports are unavailable, and placeholder (`<evaluated>`) values are injected for unresolved exports so downstream resources can still render.
+- When a post-create exists re-run fails to find a newly created resource (eventual consistency), the exists query is automatically retried using the `statecheck` retry settings if available, giving async providers time to make the resource discoverable.
+
+### Features
+
+- New optional `troubleshoot` IQL anchor for post-failure diagnostics. When a `build` post-deploy check fails or a `teardown` delete cannot be confirmed, a user-defined diagnostic query is automatically rendered and executed, with results logged as pretty-printed JSON. Supports operation-specific variants (`troubleshoot:create`, `troubleshoot:update`, `troubleshoot:delete`) with fallback to a generic `troubleshoot` anchor. Typically used with `return_vals` to capture an async operation handle (e.g. `RequestToken`) from `RETURNING *` and query its status via `{{ this.<field> }}`. See [resource query files documentation](https://stackql-deploy.io/docs/resource-query-files#troubleshoot) for details.
+- The `RETURNING *` log message (`storing RETURNING * result...`) is now logged at `debug` level instead of `info`.
+
+## 2.0.5 (2026-03-24)
+
+### Fixes
+
+- Network and authentication errors (DNS failures, 401/403 responses) are now detected early and surfaced as fatal errors instead of being silently retried.
+- Unresolved template variables are caught at render time with a clear error message identifying the missing variable and source template.
+- `command` type resources now log query output when using `RETURNING` clauses, matching the behavior of `resource` types.
+- Stack level exports (`stack_name`, `stack_env`) are now set as scoped environment variables on the host system for use by external tooling.
+
 ## 2.0.4 (2026-03-18)
 
 ### Identifier capture from `exists` queries

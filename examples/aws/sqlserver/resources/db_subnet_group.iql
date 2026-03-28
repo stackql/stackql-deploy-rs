@@ -1,0 +1,62 @@
+/*+ exists */
+SELECT count(*) as count
+FROM awscc.rds.db_subnet_groups
+WHERE region = '{{ region }}' AND
+Identifier = '{{ db_subnet_group_name }}'
+;
+
+/*+ create */
+INSERT INTO awscc.rds.db_subnet_groups (
+  DBSubnetGroupDescription,
+  DBSubnetGroupName,
+  SubnetIds,
+  Tags,
+  region
+)
+SELECT
+  '{{ db_subnet_group_description }}',
+  '{{ db_subnet_group_name }}',
+  '{{ subnet_ids }}',
+  '{{ tags }}',
+  '{{ region }}'
+RETURNING *;
+
+/*+ update */
+UPDATE awscc.rds.db_subnet_groups
+SET PatchDocument = string('{{ {
+    "DBSubnetGroupDescription": db_subnet_group_description,
+    "SubnetIds": subnet_ids,
+    "Tags": tags
+} | generate_patch_document }}')
+WHERE
+  region = '{{ region }}' AND
+  Identifier = '{{ db_subnet_group_name }}';
+
+/*+ statecheck, retries=5, retry_delay=10 */
+SELECT count(*) as count FROM
+(
+SELECT
+  AWS_POLICY_EQUAL(subnet_ids, '{{ subnet_ids }}') as test_subnet_ids,
+  AWS_POLICY_EQUAL(tags, '{{ tags }}') as test_tags
+FROM awscc.rds.db_subnet_groups
+WHERE 
+region = '{{ region }}' AND
+Identifier = '{{ db_subnet_group_name }}' AND
+db_subnet_group_description = '{{ db_subnet_group_description }}'
+) t
+WHERE test_subnet_ids = 1 AND test_tags = 1;
+
+/*+ troubleshoot:create */
+SELECT OperationStatus, StatusMessage, ErrorCode
+FROM awscc.cloud_control.resource_request
+WHERE RequestToken = '{{ this.RequestToken }}'
+AND region = '{{ region }}';
+
+/*+ exports */
+SELECT '{{ db_subnet_group_name }}' as db_subnet_group_name;
+
+/*+ delete */
+DELETE FROM awscc.rds.db_subnet_groups
+WHERE
+  Identifier = '{{ db_subnet_group_name }}' AND
+  region = '{{ region }}';

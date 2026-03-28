@@ -1,0 +1,48 @@
+/*+ exists */
+WITH tagged_resources AS
+(
+	SELECT split_part(ResourceARN, '/', 2) as internet_gateway_id
+	FROM awscc.tagging.tagged_resources
+	WHERE region = '{{ region }}'
+	AND TagFilters = '{{ global_tags | to_aws_tag_filters }}'
+	AND ResourceTypeFilters = '["ec2:internet-gateway"]'
+),
+internet_gateways AS
+(
+	SELECT internet_gateway_id
+	FROM awscc.ec2.internet_gateways_list_only
+	WHERE region = '{{ region }}'
+)
+SELECT r.internet_gateway_id
+FROM internet_gateways r
+INNER JOIN tagged_resources tr
+ON r.internet_gateway_id = tr.internet_gateway_id;
+
+/*+ statecheck, retries=5, retry_delay=5 */
+SELECT COUNT(*) as count FROM
+(
+SELECT 
+AWS_POLICY_EQUAL(tags, '{{ inet_gateway_tags }}') as test_tags
+FROM awscc.ec2.internet_gateways
+WHERE Identifier = '{{ this.internet_gateway_id }}'
+AND region = '{{ region }}'
+AND test_tags = 1
+) t;
+
+/*+ create */
+INSERT INTO awscc.ec2.internet_gateways (
+ Tags,
+ region
+)
+SELECT
+ '{{ inet_gateway_tags }}',
+ '{{ region }}'
+RETURNING *;
+
+/*+ exports */
+SELECT '{{ this.internet_gateway_id }}' as internet_gateway_id;
+
+/*+ delete */
+DELETE FROM awscc.ec2.internet_gateways
+WHERE Identifier = '{{ internet_gateway_id }}'
+AND region = '{{ region }}';
