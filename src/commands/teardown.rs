@@ -224,26 +224,35 @@ fn run_teardown(runner: &mut CommandRunner, dry_run: bool, show_queries: bool, _
         let resource_queries = runner.get_queries(resource, &full_context);
 
         // Get exists query (fallback to statecheck) - render JIT
-        let (exists_query_str, exists_retries, exists_retry_delay) =
-            if let Some(eq) = resource_queries.get("exists") {
-                let rendered =
-                    runner.render_query(&resource.name, "exists", &eq.template, &full_context);
-                (rendered, eq.options.retries, eq.options.retry_delay)
-            } else if let Some(sq) = resource_queries.get("statecheck") {
-                info!(
-                    "exists query not defined for [{}], trying statecheck query as exists query.",
-                    resource.name
-                );
-                let rendered =
-                    runner.render_query(&resource.name, "statecheck", &sq.template, &full_context);
+        let (exists_query_str, exists_retries, exists_retry_delay) = if let Some(eq) =
+            resource_queries.get("exists")
+        {
+            let rendered =
+                runner.render_query(&resource.name, "exists", &eq.template, &full_context);
+            (rendered, eq.options.retries, eq.options.retry_delay)
+        } else if let Some(sq) = resource_queries.get("statecheck") {
+            info!(
+                "exists query not defined for [{}], trying statecheck query as exists query.",
+                resource.name
+            );
+            if let Some(rendered) =
+                runner.try_render_query(&resource.name, "statecheck", &sq.template, &full_context)
+            {
                 (rendered, sq.options.retries, sq.options.retry_delay)
             } else {
                 info!(
-                    "No exists or statecheck query for [{}], skipping...",
+                    "[{}] statecheck has unresolved variables, skipping...",
                     resource.name
                 );
                 continue;
-            };
+            }
+        } else {
+            info!(
+                "No exists or statecheck query for [{}], skipping...",
+                resource.name
+            );
+            continue;
+        };
 
         // Check if delete query template exists (don't render yet — may need
         // this.* fields from the exists check).
@@ -341,6 +350,13 @@ fn run_teardown(runner: &mut CommandRunner, dry_run: bool, show_queries: bool, _
             if delete_confirmed {
                 info!("successfully deleted {}", resource.name);
             } else {
+                runner.run_troubleshoot(
+                    resource,
+                    &resource_queries,
+                    "delete",
+                    &full_context,
+                    show_queries,
+                );
                 info!("[{}] delete could not be confirmed", resource.name);
             }
         } else {

@@ -1,0 +1,62 @@
+/*+ exists */
+WITH tagged_resources AS
+(
+    SELECT split_part(ResourceARN, '/', 2) as vpc_id
+    FROM awscc.tagging.tagged_resources
+    WHERE region = '{{ region }}'
+    AND TagFilters = '{{ global_tags | to_aws_tag_filters }}'
+    AND ResourceTypeFilters = '["ec2:vpc"]'
+),
+vpcs AS
+(
+    SELECT vpc_id
+    FROM awscc.ec2.vpcs_list_only
+    WHERE region = '{{ region }}'
+)
+SELECT r.vpc_id
+FROM vpcs r
+INNER JOIN tagged_resources tr
+ON r.vpc_id = tr.vpc_id;
+
+/*+ statecheck, retries=5, retry_delay=5 */
+SELECT COUNT(*) as count FROM
+(
+SELECT 
+AWS_POLICY_EQUAL(tags, '{{ vpc_tags }}') as test_tags
+FROM awscc.ec2.vpcs
+WHERE Identifier = '{{ this.vpc_id }}'
+AND region = '{{ region }}'
+AND cidr_block = '{{ vpc_cidr_block }}'
+) t
+WHERE test_tags = 1;
+
+/*+ create */
+INSERT INTO awscc.ec2.vpcs (
+ CidrBlock,
+ Tags,
+ EnableDnsSupport,
+ EnableDnsHostnames,
+ region
+)
+SELECT
+ '{{ vpc_cidr_block }}',
+ '{{ vpc_tags }}',
+ true,
+ true,
+ '{{ region }}'
+RETURNING *;
+
+/*+ exports */
+SELECT '{{ this.vpc_id }}' as vpc_id,
+'{{ vpc_cidr_block }}' as vpc_cidr_block;
+
+/*+ troubleshoot:create */
+SELECT OperationStatus, StatusMessage, ErrorCode
+FROM awscc.cloud_control.resource_request
+WHERE RequestToken = '{{ this.RequestToken }}'
+AND region = '{{ region }}';
+
+/*+ delete */
+DELETE FROM awscc.ec2.vpcs
+WHERE Identifier = '{{ vpc_id }}'
+AND region = '{{ region }}';

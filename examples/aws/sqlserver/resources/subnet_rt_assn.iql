@@ -1,0 +1,29 @@
+/*+ exists, retries=10, retry_delay=5 */
+SELECT
+  id as subnet_route_table_assn_id
+FROM awscc.ec2.vw_subnet_route_table_associations
+WHERE
+  region = '{{ region }}'
+  AND route_table_id = '{{ route_table_id }}'
+  AND subnet_id = '{{ subnet_id }}';
+
+/*+ create */
+INSERT INTO awscc.ec2.subnet_route_table_associations (
+ RouteTableId,
+ SubnetId,
+ region
+)
+SELECT
+ '{{ route_table_id }}',
+ '{{ subnet_id }}',
+ '{{ region }}'
+RETURNING *;
+
+/*+ exports */
+SELECT '{{ this.subnet_route_table_assn_id }}' as subnet_route_table_assn_id;
+
+/*+ delete */
+DELETE FROM awscc.ec2.subnet_route_table_associations
+WHERE
+Identifier = '{{ subnet_route_table_assn_id }}' AND
+region = '{{ region }}';

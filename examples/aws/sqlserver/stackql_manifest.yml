@@ -1,0 +1,232 @@
+version: 1
+name: sqlserver-migration-lab
+description: SQL Server 2016 Express RDS lab instance for Databricks migration course
+providers:
+  - awscc::v26.03.00379
+
+globals:
+  - name: region
+    value: ap-southeast-2
+  - name: db_master_username
+    value: admin
+  - name: db_master_password
+    value: "{{ DB_MASTER_PASSWORD }}"
+  - name: global_tags
+    value:
+      - Key: 'stackql:stack-name'
+        Value: "{{ stack_name }}"
+      - Key: 'stackql:stack-env'
+        Value: "{{ stack_env }}"
+      - Key: 'stackql:resource-name'
+        Value: "{{ resource_name }}"
+
+resources:
+  - name: vpc
+    description: VPC for SQL Server lab
+    props:
+      - name: vpc_cidr_block
+        values:
+          prd:
+            value: "10.0.0.0/16"
+          sit:
+            value: "10.1.0.0/16"
+          dev:
+            value: "10.2.0.0/16"
+      - name: vpc_tags
+        value:
+          - Key: Name
+            Value: "{{ stack_name }}-{{ stack_env }}-vpc"
+        merge:
+          - global_tags
+    return_vals:
+      create:
+        - RequestToken
+    exports:
+      - vpc_id
+      - vpc_cidr_block
+
+  - name: subnet_a
+    file: subnet.iql
+    props:
+      - name: subnet_cidr_block
+        values:
+          prd:
+            value: "10.0.1.0/24"
+          sit:
+            value: "10.1.1.0/24"
+          dev:
+            value: "10.2.1.0/24"
+      - name: availability_zone
+        value: ap-southeast-2a
+      - name: subnet_tags
+        value:
+          - Key: Name
+            Value: "{{ stack_name }}-{{ stack_env }}-subnet-a"
+        merge: ['global_tags']
+    return_vals:
+      create:
+        - RequestToken
+    exports:
+      - subnet_id: subnet_a_id
+      - availability_zone: subnet_a_availability_zone
+
+  - name: subnet_b
+    file: subnet.iql
+    props:
+      - name: subnet_cidr_block
+        values:
+          prd:
+            value: "10.0.2.0/24"
+          sit:
+            value: "10.1.2.0/24"
+          dev:
+            value: "10.2.2.0/24"
+      - name: availability_zone
+        value: ap-southeast-2b
+      - name: subnet_tags
+        value:
+          - Key: Name
+            Value: "{{ stack_name }}-{{ stack_env }}-subnet-b"
+        merge: ['global_tags']
+    return_vals:
+      create:
+        - RequestToken
+    exports:
+      - subnet_id: subnet_b_id
+      - availability_zone: subnet_b_availability_zone
+
+  - name: db_subnet_group
+    description: RDS subnet group spanning 2 AZs
+    props:
+      - name: db_subnet_group_name
+        value: "{{ stack_name }}-{{ stack_env }}-subnet-group"
+      - name: db_subnet_group_description
+        value: SQL Server lab subnet group
+      - name: subnet_ids
+        value:
+          - '{{ subnet_a_id }}'
+          - '{{ subnet_b_id }}'
+      - name: tags
+        value: []
+        merge: ['global_tags']
+    return_vals:
+      create:
+        - RequestToken        
+    exports:
+      - db_subnet_group_name
+
+  - name: inet_gateway
+    props:
+      - name: inet_gateway_tags
+        value:
+          - Key: Name
+            Value: "{{ stack_name }}-{{ stack_env }}-inet-gateway"
+        merge: ['global_tags']
+    exports:
+      - internet_gateway_id
+
+  - name: inet_gw_attachment
+    props: []
+
+  - name: route_table
+    props:
+      - name: route_table_tags
+        value:
+          - Key: Name
+            Value: "{{ stack_name }}-{{ stack_env }}-route-table"
+        merge: ['global_tags']
+    exports:
+      - route_table_id
+
+  - name: subnet_rt_assn_a
+    file: subnet_rt_assn.iql
+    props:
+      - name: subnet_id
+        value: '{{ subnet_a_id }}'
+      - name: route_table_id
+        value: '{{ route_table_id }}'
+    exports:
+      - subnet_route_table_assn_id: subnet_a_route_table_assn_id
+
+  - name: subnet_rt_assn_b
+    file: subnet_rt_assn.iql
+    props:
+      - name: subnet_id
+        value: '{{ subnet_b_id }}'
+      - name: route_table_id
+        value: '{{ route_table_id }}'
+    exports:
+      - subnet_route_table_assn_id: subnet_b_route_table_assn_id
+
+  - name: inet_route
+    props: []
+
+  - name: security_group
+    props:
+      - name: group_description
+        value: SG allowing inbound MSSQL from anywhere
+      - name: group_name
+        value: "{{ stack_name }}-{{ stack_env }}-sg"
+      - name: sg_tags
+        value: []
+        merge: ['global_tags']
+      - name: security_group_ingress
+        value:
+          - IpProtocol: "tcp"
+            CidrIp: "0.0.0.0/0"
+            Description: Allow MSSQL from anywhere
+            FromPort: 1433
+            ToPort: 1433
+      - name: security_group_egress
+        value:
+          - CidrIp: "0.0.0.0/0"
+            Description: Allow all outbound traffic
+            FromPort: -1
+            ToPort: -1
+            IpProtocol: "-1"
+    return_vals:
+      create:
+        - RequestToken
+    exports:
+      - security_group_id
+
+  - name: db_instance
+    description: SQL Server 2016 Express RDS instance
+    props:
+      - name: db_instance_identifier
+        value: "{{ stack_name }}-{{ stack_env }}"
+      - name: db_instance_class
+        value: db.t3.small
+      - name: engine
+        value: sqlserver-ex
+      - name: engine_version
+        value: "14.00"
+      - name: allocated_storage
+        value: "20"
+      - name: storage_type
+        value: gp2
+      - name: license_model
+        value: license-included
+      - name: master_username
+        value: "{{ db_master_username }}"
+      - name: master_user_password
+        value: "{{ db_master_password }}"
+      - name: db_subnet_group_name
+        value: "{{ db_subnet_group_name }}"
+      - name: vpc_security_groups
+        value:
+          - "{{ security_group_id }}"
+      - name: publicly_accessible
+        value: true
+      - name: multi_az
+        value: false
+      - name: backup_retention_period
+        value: 0
+      - name: tags
+        value: []
+        merge: ['global_tags']
+    return_vals:
+      create:
+        - RequestToken
+    exports:
+      - db_endpoint

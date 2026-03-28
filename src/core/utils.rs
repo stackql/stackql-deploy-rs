@@ -600,7 +600,7 @@ pub fn export_vars(
         // --- resource-scoped key (immutable: only written if not already set) ---
         let scoped_key = format!("{}.{}", resource_name, key);
         global_context.entry(scoped_key.clone()).or_insert_with(|| {
-            info!(
+            debug!(
                 "set {} [{}] to [{}] in exports",
                 if is_protected {
                     "protected variable"

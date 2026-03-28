@@ -1,0 +1,28 @@
+/*+ exists */
+SELECT count(*) as count
+FROM awscc.ec2.vpc_gateway_attachments
+WHERE Identifier = 'IGW|{{ vpc_id }}'
+AND region = '{{ region }}';
+
+/*+ create */
+INSERT INTO awscc.ec2.vpc_gateway_attachments (
+ InternetGatewayId,
+ VpcId,
+ region
+)
+SELECT
+ '{{ internet_gateway_id }}',
+ '{{ vpc_id }}',
+ '{{ region }}'
+RETURNING *;
+
+/*+ statecheck, retries=3, retry_delay=5 */
+SELECT count(*) as count
+FROM awscc.ec2.vpc_gateway_attachments
+WHERE Identifier = 'IGW|{{ vpc_id }}'
+AND region = '{{ region }}';
+
+/*+ delete */
+DELETE FROM awscc.ec2.vpc_gateway_attachments
+WHERE Identifier = 'IGW|{{ vpc_id }}'
+AND region = '{{ region }}';

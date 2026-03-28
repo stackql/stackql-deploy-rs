@@ -1,0 +1,82 @@
+/*+ exists */
+SELECT count(*) as count
+FROM awscc.rds.db_instances
+WHERE region = '{{ region }}'
+AND Identifier = '{{ db_instance_identifier }}'
+
+/*+ create */
+INSERT INTO awscc.rds.db_instances (
+  AllocatedStorage,
+  DBInstanceClass,
+  DBInstanceIdentifier,
+  DBSubnetGroupName,
+  Engine,
+  EngineVersion,
+  LicenseModel,
+  MasterUsername,
+  MasterUserPassword,
+  MultiAZ,
+  BackupRetentionPeriod,
+  PubliclyAccessible,
+  StorageType,
+  Tags,
+  VPCSecurityGroups,
+  region
+)
+SELECT
+  '{{ allocated_storage }}',
+  '{{ db_instance_class }}',
+  '{{ db_instance_identifier }}',
+  '{{ db_subnet_group_name }}',
+  '{{ engine }}',
+  '{{ engine_version }}',
+  '{{ license_model }}',
+  '{{ master_username }}',
+  '{{ master_user_password }}',
+  {{ multi_az }},
+  {{ backup_retention_period }},
+  {{ publicly_accessible }},
+  '{{ storage_type }}',
+  '{{ tags }}',
+  '{{ vpc_security_groups }}',
+  '{{ region }}'
+RETURNING *
+
+/*+ update */
+UPDATE awscc.rds.db_instances
+SET PatchDocument = string('{{ {
+  "AllocatedStorage": allocated_storage,
+  "DBInstanceClass": db_instance_class,
+  "BackupRetentionPeriod": backup_retention_period,
+  "MasterUserPassword": master_user_password,
+  "MultiAZ": multi_az,
+  "PubliclyAccessible": publicly_accessible,
+  "StorageType": storage_type,
+  "Tags": tags,
+  "VPCSecurityGroups": vpc_security_groups
+} | generate_patch_document }}')
+WHERE region = '{{ region }}'
+AND Identifier = '{{ db_instance_identifier }}'
+
+/*+ statecheck, retries=20, retry_delay=30 */
+SELECT count(*) as count
+FROM awscc.rds.db_instances
+WHERE region = '{{ region }}'
+AND Identifier = '{{ db_instance_identifier }}'
+
+/*+ exports */
+SELECT endpoint as db_endpoint
+FROM awscc.rds.db_instances
+WHERE region = '{{ region }}'
+AND Identifier = '{{ db_instance_identifier }}'
+
+/*+ troubleshoot:create */
+SELECT OperationStatus, StatusMessage, ErrorCode
+FROM awscc.cloud_control.resource_request
+WHERE RequestToken = '{{ this.RequestToken }}'
+AND region = '{{ region }}';
+
+/*+ delete */
+DELETE FROM awscc.rds.db_instances
+WHERE region = '{{ region }}'
+AND Identifier = '{{ db_instance_identifier }}'
