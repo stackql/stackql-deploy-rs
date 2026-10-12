@@ -118,6 +118,11 @@ jobs:
             artifact-name: stackql-deploy-windows-x86_64
             archive: zip
             use-cross: false
+          - target: aarch64-pc-windows-msvc
+            os: windows-11-arm
+            artifact-name: stackql-deploy-windows-arm64
+            archive: zip
+            use-cross: false
           - target: aarch64-apple-darwin
             os: macos-latest
             artifact-name: stackql-deploy-macos-arm64
@@ -155,7 +160,7 @@ jobs:
         if: matrix.use-cross == false
         run: cargo build --release --target ${{ matrix.target }}
       - name: Strip binary (Linux / macOS native)
-        if: matrix.os != 'windows-latest' && matrix.use-cross == false
+        if: matrix.archive == 'tar.gz' && matrix.use-cross == false
         run: strip target/${{ matrix.target }}/release/stackql-deploy
       - name: Package (tar.gz)
         if: matrix.archive == 'tar.gz'
@@ -192,6 +197,9 @@ jobs:
             archive: tar.gz
           - os: windows-latest
             artifact-name: stackql-deploy-windows-x86_64
+            archive: zip
+          - os: windows-11-arm
+            artifact-name: stackql-deploy-windows-arm64
             archive: zip
           - os: macos-latest
             artifact-name: stackql-deploy-macos-arm64

@@ -104,6 +104,7 @@ Remove-Item stackql-deploy.zip
 **WSL / Git Bash:**
 
 ```bash
+# x86_64 (use stackql-deploy-windows-arm64.zip on ARM64 devices)
 curl -L -o stackql-deploy.zip https://github.com/stackql/stackql-deploy-rs/releases/latest/download/stackql-deploy-windows-x86_64.zip
 unzip stackql-deploy.zip
 ```
@@ -121,6 +122,7 @@ Pre-built binaries are attached to every release on the [__GitHub Releases__](ht
 | Linux ARM64 | `stackql-deploy-linux-arm64.tar.gz` |
 | macOS Universal (Apple Silicon + Intel) | `stackql-deploy-macos-universal.tar.gz` |
 | Windows x86_64 | `stackql-deploy-windows-x86_64.zip` |
+| Windows ARM64 | `stackql-deploy-windows-arm64.zip` |
 
 </TabItem>
 <TabItem value="github-actions" label={tabLabel(<FaGithub />, 'GitHub Actions')}>

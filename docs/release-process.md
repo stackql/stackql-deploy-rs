@@ -24,7 +24,7 @@ flowchart TD
 
     subgraph release.yml
         M --> N[prepare: fetch contributors via StackQL]
-        N --> O[build: cross-compile 5 platform binaries]
+        N --> O[build: build 6 platform binaries]
         O --> P[release: collect archives, generate SHA256SUMS]
         P --> Q[softprops/action-gh-release creates GitHub Release]
         Q --> R[publish: cargo publish to crates.io]
@@ -113,7 +113,7 @@ The workflow runs four jobs in sequence:
 | Job | Description |
 |-----|-------------|
 | **prepare** | Fetches the contributor list via StackQL and uploads it as an artifact |
-| **build** | Cross-compiles binaries for all five platform targets in parallel |
+| **build** | Builds binaries for all six platform targets in parallel |
 | **release** | Collects archives, generates `SHA256SUMS`, and creates the GitHub Release |
 | **publish** | Runs `cargo publish` to push the crate to crates.io |
 
@@ -126,6 +126,7 @@ A successful run results in:
   - `stackql-deploy-macos-arm64.tar.gz` (contains `stackql-deploy`)
   - `stackql-deploy-macos-x86_64.tar.gz` (contains `stackql-deploy`)
   - `stackql-deploy-windows-x86_64.zip` (contains `stackql-deploy.exe`)
+  - `stackql-deploy-windows-arm64.zip` (contains `stackql-deploy.exe`)
   - `SHA256SUMS`
 - The crate published at `https://crates.io/crates/stackql-deploy`
 

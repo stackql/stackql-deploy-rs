@@ -17,8 +17,13 @@ Behaviour (unchanged from the previous Deno Deploy app):
   `irm https://get-stackql-deploy.io/install | iex` (Windows).
 - `GET /install.sh` - always the POSIX `sh` installer. Runs `uname` client-side
   to pick the right OS + arch asset.
-- `GET /install.ps1` - always the PowerShell installer. Downloads and expands the
-  Windows zip into the current directory.
+- `GET /install.ps1` - always the PowerShell installer. Detects the native
+  Windows architecture and downloads and expands the matching zip
+  (`stackql-deploy-windows-x86_64.zip` or `stackql-deploy-windows-arm64.zip`,
+  containing `stackql-deploy.exe`) into the current directory. ARM64 is detected
+  even when x64 PowerShell runs under emulation, by reading the system
+  `PROCESSOR_ARCHITECTURE` from the registry before the process environment.
+  AMD64 is used only when no architecture can be detected.
 - Any other path - `301`-redirects to `https://stackql-deploy.io`.
 
 ### Wrong-shell guards

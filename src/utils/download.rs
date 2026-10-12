@@ -45,23 +45,30 @@ pub fn get_download_url() -> Result<String, AppError> {
             STACKQL_RELEASE_BASE_URL
         )),
         Platform::Windows => Ok(format!(
-            "{}/stackql_windows_amd64.zip",
-            STACKQL_RELEASE_BASE_URL
+            "{}/stackql_windows_{}.zip",
+            STACKQL_RELEASE_BASE_URL,
+            stackql_arch()
         )),
-        Platform::Linux => {
-            let arch = if cfg!(target_arch = "aarch64") {
-                "arm64"
-            } else {
-                "amd64"
-            };
-            Ok(format!(
-                "{}/stackql_linux_{}.zip",
-                STACKQL_RELEASE_BASE_URL, arch
-            ))
-        }
+        Platform::Linux => Ok(format!(
+            "{}/stackql_linux_{}.zip",
+            STACKQL_RELEASE_BASE_URL,
+            stackql_arch()
+        )),
         Platform::Unknown => Err(AppError::CommandFailed(
             "Unsupported platform for stackql download".to_string(),
         )),
+    }
+}
+
+/// Maps the compile-time CPU architecture to the suffix used by StackQL release
+/// asset names (`arm64` or `amd64`). Decided at compile time so a native ARM64
+/// build of stackql-deploy fetches a native ARM64 stackql rather than relying
+/// on emulation.
+fn stackql_arch() -> &'static str {
+    if cfg!(target_arch = "aarch64") {
+        "arm64"
+    } else {
+        "amd64"
     }
 }
 
