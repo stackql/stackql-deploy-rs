@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.3.0 (2026-10-12)
+
+### Features
+
+- Added a native Windows ARM64 release binary (`stackql-deploy-windows-arm64.zip`, target `aarch64-pc-windows-msvc`), built and smoke-tested on a `windows-11-arm` runner alongside the existing x86_64 build. Previously Windows-on-ARM users ran the x86_64 binary under emulation.
+- `stackql-deploy` now downloads the native `stackql_windows_arm64.zip` StackQL binary when it is itself an ARM64 Windows build. Previously every Windows build fetched `stackql_windows_amd64.zip` regardless of CPU architecture.
+- The `get-stackql-deploy.io` PowerShell installer (`irm https://get-stackql-deploy.io/install | iex`) now detects the native Windows architecture and installs the ARM64 build on ARM64 devices, even when invoked from an x64 PowerShell running under emulation. Previously it always installed the x86_64 build.
+
 ## 2.2.0 (2026-09-10)
 
 ### Features

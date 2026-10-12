@@ -6,6 +6,7 @@
 | Linux    | arm64        | `stackql-deploy-linux-arm64.tar.gz` |
 | macOS    | Universal (Apple Silicon + Intel) | `stackql-deploy-macos-universal.tar.gz` |
 | Windows  | x86_64       | `stackql-deploy-windows-x86_64.zip` |
+| Windows  | arm64        | `stackql-deploy-windows-arm64.zip` |
 
 Each archive contains a single binary named `stackql-deploy` (or `stackql-deploy.exe` on Windows). Verify your download with `SHA256SUMS`.
 
