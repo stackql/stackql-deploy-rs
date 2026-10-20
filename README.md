@@ -178,6 +178,10 @@ stackql-deploy --help
 
 Full documentation — manifest reference, query anchors, template filters, provider examples is at **[stackql-deploy.io/docs](https://stackql-deploy.io/docs)**.
 
+## Contributing
+
+Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md) first. [AGENTS.md](AGENTS.md) describes the repository layout, the build and test commands, and the conventions the project follows.
+
 ## License
 
 MIT - see [LICENSE](LICENSE).

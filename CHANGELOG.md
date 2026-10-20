@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.4.0 (2026-10-21)
+
+### Fixes
+
+- Updated the HTTP client used to download the StackQL binary and remote `init` templates from `reqwest` 0.11 (rustls 0.21, `webpki-roots` 0.25.4) to `reqwest` 0.12 (rustls 0.23, `rustls-webpki` 0.103.16, `webpki-roots` 1.0.10) in response to the compromise of eight eMudhra (emSign) intermediate CA private keys disclosed on 2026-10-17 (CVE-2026-111943). The certificate trust store is compiled into the binary and the client performs no revocation checking, so every earlier release accepted certificate chains through the compromised intermediates via the `emSign ECC Root CA - G3` and `AAA Certificate Services` roots. Both roots are absent from the new bundle and `rustls-webpki` now rejects any chain containing the compromised intermediate public keys. The client stays on rustls with the ring provider on all six release targets and there is no change to CLI, manifest, or template behaviour. All previously published binaries carry the old trust store and should be replaced with this release.
+
 ## 2.3.0 (2026-10-12)
 
 ### Features
