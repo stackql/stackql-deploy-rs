@@ -12,13 +12,13 @@ jobs:
     name: Build Docusaurus
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
           cache: yarn
           cache-dependency-path: website/yarn.lock
 
@@ -31,7 +31,7 @@ jobs:
         working-directory: website
 
       - name: Upload Build Artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: website/build # Ensure the path is correctly set to the Docusaurus build output
 
@@ -53,6 +53,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
-        with:
-          working-directory: website/build # Ensures the correct directory is used for deployment
+        uses: actions/deploy-pages@v5
