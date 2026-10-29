@@ -57,5 +57,8 @@
   },
   "engines": {
     "node": ">=20.0"
+  },
+  "resolutions": {
+    "tinypool": "^2.1.2"
   }
 }

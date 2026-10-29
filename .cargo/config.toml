@@ -1,0 +1,4 @@
+# Keep `cargo update` within the `rust-version` declared in Cargo.toml: when a
+# newer release of a dependency needs a newer compiler, resolve an older one.
+[resolver]
+incompatible-rust-versions = "fallback"

@@ -81,8 +81,10 @@ Do not run the live tests unless you have been given credentials for them.
 
 ## Coding conventions
 
-- Rust 2021 edition, `rust-version = "1.75"` in `Cargo.toml`. Do not use
-  features newer than the MSRV without bumping it deliberately.
+- Rust 2021 edition, `rust-version = "1.88"` in `Cargo.toml`, enforced by the
+  `MSRV Check` job in CI. Do not use features newer than the MSRV without
+  bumping it deliberately; `.cargo/config.toml` makes `cargo update` prefer
+  dependency versions that build on it.
 - Keep `main.rs` thin; put logic in the library modules so it is testable
   in process.
 - Application errors are variants of `AppError` in `src/error.rs`; add a
