@@ -16,3 +16,4 @@ contributors.csv
 .claude/
 nohup.out
 tmp/
+stackql_mcp_server_*.log

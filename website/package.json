@@ -4,6 +4,9 @@
   "private": true,
   "scripts": {
     "docusaurus": "docusaurus",
+    "vendor-config": "rimraf .shared-config && git clone --depth 1 --branch main https://github.com/stackql/docusaurus-config.git .shared-config",
+    "prestart": "yarn vendor-config",
+    "prebuild": "yarn vendor-config",
     "start": "docusaurus start",
     "build": "docusaurus build",
     "swizzle": "docusaurus swizzle",
@@ -15,14 +18,18 @@
   },
   "dependencies": {
     "@docusaurus/core": "3.9.2",
+    "@docusaurus/plugin-ideal-image": "3.9.2",
     "@docusaurus/preset-classic": "3.9.2",
     "@docusaurus/theme-mermaid": "3.9.2",
     "@emotion/react": "^11.13.0",
     "@emotion/styled": "^11.13.0",
     "@iconify/react": "^5.0.2",
     "@mdx-js/react": "^3.0.0",
+    "@mui/icons-material": "^5.16.7",
     "@mui/material": "^5.16.7",
     "@mui/styles": "^5.16.7",
+    "@stackql/docusaurus-plugin-aeo": "^0.5.0",
+    "@stackql/docusaurus-plugin-structured-data": "^1.7.0",
     "baseline-browser-mapping": "^2.10.8",
     "caniuse-lite": "^1.0.30001779",
     "clsx": "^2.0.0",
@@ -33,7 +40,8 @@
   },
   "devDependencies": {
     "@docusaurus/module-type-aliases": "3.9.2",
-    "@docusaurus/types": "3.9.2"
+    "@docusaurus/types": "3.9.2",
+    "rimraf": "^6.0.1"
   },
   "browserslist": {
     "production": [
