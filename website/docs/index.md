@@ -11,6 +11,8 @@ custom_edit_url: null
 tags: []
 draft: false
 unlisted: false
+# emits a SoftwareApplication node (structured-data plugin), as on stackql.io
+softwareApplication: true
 ---
 
 ![StackQL Deploy](/img/stackql-deploy-featured-image.png)

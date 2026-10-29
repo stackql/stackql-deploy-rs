@@ -1,12 +1,20 @@
 // @ts-check
 
-import config from './docusaurus.config.js';
-
-const baseUrl = config.baseUrl;
+const baseUrl = '/';
 
 /** @type {import('@docusaurus/plugin-content-docs').SidebarsConfig} */
 const sidebars = {
   docsSidebar: [
+    // Way back to the main stackql.io docs, as on the provider microsites and
+    // the query library. '/stackqldocs' is a shared redirect route (registered
+    // by the vendored stackql-shared plugin) to https://stackql.io/, so it
+    // renders as an internal link. Styling: .sidebar-back-link in global.css.
+    {
+      type: 'link',
+      label: 'Back to StackQL Docs',
+      href: '/stackqldocs',
+      className: 'sidebar-back-link',
+    },
     {
       type: 'doc',
       id: 'index', 
