@@ -198,28 +198,7 @@ fn extract_binary(
         }
         _ => {
             // For Windows and Linux, we use the zip file
-            let file = File::open(archive_path).map_err(AppError::IoError)?;
-            let mut archive = ZipArchive::new(file).map_err(|e| {
-                AppError::CommandFailed(format!("Failed to open zip archive: {}", e))
-            })?;
-
-            for i in 0..archive.len() {
-                let mut file = archive.by_index(i).map_err(|e| {
-                    AppError::CommandFailed(format!("Failed to extract file: {}", e))
-                })?;
-
-                let outpath = match file.enclosed_name() {
-                    Some(path) => dest_dir.join(path),
-                    _none => continue,
-                };
-
-                if file.name().ends_with('/') {
-                    fs::create_dir_all(&outpath).map_err(AppError::IoError)?;
-                } else {
-                    let mut outfile = File::create(&outpath).map_err(AppError::IoError)?;
-                    io::copy(&mut file, &mut outfile).map_err(AppError::IoError)?;
-                }
-            }
+            extract_zip(archive_path, dest_dir)?;
 
             // Check if we need to rename the binary on Windows
             if get_platform() == Platform::Windows {
@@ -241,6 +220,52 @@ fn extract_binary(
     Ok(binary_path)
 }
 
+/// Extracts a zip archive into `dest_dir`.
+///
+/// Entries are written as plain files and directories only: no symlinks are
+/// created and no permission bits from the archive are applied. An entry whose
+/// path would escape `dest_dir` (absolute, or containing `..`) or that is a
+/// symlink fails the whole extraction rather than being skipped, since the
+/// stackql release archive never contains either.
+fn extract_zip(archive_path: &Path, dest_dir: &Path) -> Result<(), AppError> {
+    let file = File::open(archive_path).map_err(AppError::IoError)?;
+    let mut archive = ZipArchive::new(file)
+        .map_err(|e| AppError::CommandFailed(format!("Failed to open zip archive: {}", e)))?;
+
+    for i in 0..archive.len() {
+        let mut entry = archive
+            .by_index(i)
+            .map_err(|e| AppError::CommandFailed(format!("Failed to extract file: {}", e)))?;
+
+        let entry_name = String::from_utf8_lossy(entry.name_raw()).into_owned();
+        let relative = entry.enclosed_name().ok_or_else(|| {
+            AppError::CommandFailed(format!(
+                "Refusing to extract zip entry with unsafe path: {}",
+                entry_name
+            ))
+        })?;
+        if entry.is_symlink() {
+            return Err(AppError::CommandFailed(format!(
+                "Refusing to extract symlink zip entry: {}",
+                entry_name
+            )));
+        }
+        let outpath = dest_dir.join(relative);
+
+        if entry.is_dir() {
+            fs::create_dir_all(&outpath).map_err(AppError::IoError)?;
+        } else {
+            if let Some(parent) = outpath.parent() {
+                fs::create_dir_all(parent).map_err(AppError::IoError)?;
+            }
+            let mut outfile = File::create(&outpath).map_err(AppError::IoError)?;
+            io::copy(&mut entry, &mut outfile).map_err(AppError::IoError)?;
+        }
+    }
+
+    Ok(())
+}
+
 /// Recursively search for a file by name in a directory tree.
 /// Returns the first match that is a regular file (not a directory).
 fn find_file_recursive(dir: &Path, target_name: &str) -> Option<PathBuf> {
@@ -256,4 +281,83 @@ fn find_file_recursive(dir: &Path, target_name: &str) -> Option<PathBuf> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use zip::write::SimpleFileOptions;
+    use zip::{CompressionMethod, ZipWriter};
+
+    enum Entry<'a> {
+        File(&'a str, &'a [u8]),
+        Dir(&'a str),
+        Symlink(&'a str, &'a str),
+    }
+
+    fn write_zip(path: &Path, entries: &[Entry]) {
+        let mut zip = ZipWriter::new(File::create(path).unwrap());
+        let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        for entry in entries {
+            match entry {
+                Entry::File(name, data) => {
+                    zip.start_file(*name, options).unwrap();
+                    zip.write_all(data).unwrap();
+                }
+                Entry::Dir(name) => zip.add_directory(*name, options).unwrap(),
+                Entry::Symlink(name, target) => zip.add_symlink(*name, *target, options).unwrap(),
+            }
+        }
+        zip.finish().unwrap();
+    }
+
+    #[test]
+    fn extract_zip_writes_files_and_directories() {
+        let tmp = tempfile::tempdir().unwrap();
+        let archive = tmp.path().join("ok.zip");
+        let dest = tmp.path().join("out");
+        fs::create_dir(&dest).unwrap();
+        write_zip(
+            &archive,
+            &[
+                Entry::File("stackql", b"binary"),
+                Entry::Dir("docs/"),
+                Entry::File("docs/readme.txt", b"hello"),
+            ],
+        );
+
+        extract_zip(&archive, &dest).unwrap();
+
+        assert_eq!(fs::read(dest.join("stackql")).unwrap(), b"binary");
+        assert!(dest.join("docs").is_dir());
+        assert_eq!(fs::read(dest.join("docs/readme.txt")).unwrap(), b"hello");
+    }
+
+    #[test]
+    fn extract_zip_rejects_path_traversal() {
+        let tmp = tempfile::tempdir().unwrap();
+        let archive = tmp.path().join("traversal.zip");
+        let dest = tmp.path().join("out");
+        fs::create_dir(&dest).unwrap();
+        write_zip(&archive, &[Entry::File("../escaped.txt", b"pwned")]);
+
+        let err = extract_zip(&archive, &dest).unwrap_err();
+
+        assert!(err.to_string().contains("unsafe path"), "{}", err);
+        assert!(!tmp.path().join("escaped.txt").exists());
+    }
+
+    #[test]
+    fn extract_zip_rejects_symlinks() {
+        let tmp = tempfile::tempdir().unwrap();
+        let archive = tmp.path().join("symlink.zip");
+        let dest = tmp.path().join("out");
+        fs::create_dir(&dest).unwrap();
+        write_zip(&archive, &[Entry::Symlink("stackql", "/etc/passwd")]);
+
+        let err = extract_zip(&archive, &dest).unwrap_err();
+
+        assert!(err.to_string().contains("symlink"), "{}", err);
+        assert!(fs::symlink_metadata(dest.join("stackql")).is_err());
+    }
 }

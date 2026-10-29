@@ -10,6 +10,7 @@ on:
       - 'build.rs'
       - 'Cargo.toml'
       - 'Cargo.lock'
+      - '.cargo/**'
       - '.github/workflows/ci.yml'
   pull_request:
     branches: [main]
@@ -20,6 +21,7 @@ on:
       - 'build.rs'
       - 'Cargo.toml'
       - 'Cargo.lock'
+      - '.cargo/**'
       - '.github/workflows/ci.yml'
 
 env:
@@ -67,6 +69,21 @@ jobs:
         run: touch contributors.csv
       - name: Check compilation
         run: cargo check --release
+
+  # Runs on: PR to main. Enforces the rust-version declared in Cargo.toml;
+  # keep the toolchain below in step with it.
+  msrv:
+    name: MSRV Check
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@1.88
+      - uses: Swatinem/rust-cache@v2
+      - name: Create placeholder contributors file
+        run: touch contributors.csv
+      - name: Check compilation on MSRV
+        run: cargo check --locked --all-targets
 
   # Runs on: push to main — fetch contributors for build-time injection
   prepare:

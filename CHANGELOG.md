@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- Upgraded the `zip` crate used to extract the downloaded StackQL binary from 0.6.6 to 9.1.3, resolving RUSTSEC-2026-0367, RUSTSEC-2026-0368 and RUSTSEC-2026-0369 and the critical "zip cloaking" dual-header parser differential advisory fixed in 9.0.5 ([#63](https://github.com/stackql/stackql-deploy-rs/issues/63)). Only the pure-Rust deflate backend is now compiled in, which also drops the `time` 0.3.41 (RUSTSEC-2026-0009), `pbkdf2` and `base64ct` dependencies. Archive extraction now fails on any entry that is a symlink or whose path would leave the destination directory; previously such path entries were silently skipped. Regular files are still written without applying permission bits from the archive.
+- Updated `bytes` to 1.12.1 (RUSTSEC-2026-0007) and `crossbeam-epoch` to 0.9.21 (RUSTSEC-2026-0204), so `cargo audit` reports no vulnerabilities.
+- Raised the declared minimum supported Rust version from 1.75, which the crate had not built on for several releases, to 1.88, as required by `zip` 9. A new `MSRV Check` CI job runs `cargo check --locked` on that toolchain, and `.cargo/config.toml` makes `cargo update` prefer dependency versions compatible with it.
+- Website: resolved critical advisories in transitive Docusaurus build dependencies by updating `proxy-addr` to 2.0.8, `websocket-driver` to 0.7.5, `shell-quote` to 1.12.0 and, through a Yarn resolution, `tinypool` to 2.2.0.
+
 ## 2.4.0 (2026-10-21)
 
 ### Fixes
