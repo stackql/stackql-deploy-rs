@@ -467,7 +467,7 @@ StackQL Deploy uses a Jinja2-compatible templating engine and extends it with cu
 Here are a few commonly used filters:
 
 - `from_json` - Converts JSON strings to native objects for iteration and manipulation
-- `tojson` - Converts objects back to JSON strings
+- `json_encode` - Converts objects back to JSON strings
 - `sql_escape` - Properly escapes SQL string literals for nested SQL statements
 - `generate_patch_document` - Creates RFC6902-compliant patch documents for AWS resources
 - `base64_encode` - Encodes strings as base64 for API fields requiring binary data

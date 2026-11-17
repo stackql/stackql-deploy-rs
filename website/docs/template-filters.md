@@ -32,19 +32,23 @@ INSERT INTO google.compute.instances
  SELECT
 '{{ instance_name_prefix }}-{{ loop.index }}',
 /* other values... */
-'[ {{ network_interface | tojson }} ]';
+'[ {{ network_interface | json_encode }} ]';
 {% endfor %}
 ```
 
-### `tojson`
+### `json_encode`
 
-A built-in filter that converts a dictionary or list into a JSON string. Often used in conjunction with `from_json` when working with complex data structures.
+A Tera built-in filter that converts a dictionary or list into a compact JSON string; the inverse of `from_json`, and often used with it when working with complex data structures. Stacks written for the Python v1 used the Jinja2 equivalent `tojson`, which is not available in v2; replace it with `json_encode`.
 
 **Example usage:**
 
 ```sql
-'[ {{ network_interface | tojson }} ]'
+'[ {{ network_interface | json_encode }} ]'
 ```
+
+Manifest values that are mappings or lists are already rendered to JSON text before they reach a query, so `{{ policy }}` on its own emits the JSON document. Applying `json_encode` to such a value (or to any string) JSON-encodes the string itself, producing a quoted and escaped JSON string literal such as `"{\"Version\":\"2012-10-17\"}"`. Use that form only where the API expects a JSON document embedded as a string value.
+
+`json_encode` does not escape single quotes. If the data can contain them, chain `sql_escape` when the result goes inside a SQL string literal: `'{{ value | json_encode | sql_escape }}'`.
 
 ### `generate_patch_document`
 
@@ -124,7 +128,7 @@ INSERT INTO aws.iam.policies (
 )
 SELECT
   /* values... */
-  '{{ combined_policies | tojson }}',
+  '{{ combined_policies | json_encode }}',
   /* other values... */
 ;
 ```
@@ -144,7 +148,7 @@ INSERT INTO aws.lambda.functions (
 )
 SELECT
   /* values... */
-  '{{ complete_config | tojson }}',
+  '{{ complete_config | json_encode }}',
   /* other values... */
 ;
 ```
@@ -276,7 +280,7 @@ SELECT
 Filters can be chained together to perform multiple transformations in sequence:
 
 ```sql
-'{{ user_config | from_json | merge_objects(default_config) | tojson | base64_encode }}'
+'{{ user_config | from_json | merge_objects(default_config) | json_encode | base64_encode }}'
 ```
 
 ## Custom Filter Development
